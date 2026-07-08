@@ -1,0 +1,232 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cost-effective font stack using system fonts */
+/* No external font imports - using built-in system fonts for better performance */
+
+body,
+html {
+    /* Bargain font stack - using system fonts for cost efficiency */
+    --font-sans:
+        system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-heading: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+    --font-ui: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+}
+
+@layer base {
+    :root {
+        --background: 0 0% 100%;
+        --foreground: 222.2 84% 4.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 84% 4.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 84% 4.9%;
+        --primary: 221.2 83.2% 53.3%;
+        --primary-foreground: 210 40% 98%;
+        --secondary: 210 40% 96%;
+        --secondary-foreground: 222.2 84% 4.9%;
+        --muted: 210 40% 96%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --accent: 210 40% 96%;
+        --accent-foreground: 222.2 84% 4.9%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --ring: 221.2 83.2% 53.3%;
+        --radius: 8px;
+        --sidebar-background: 0 0% 98%;
+        --sidebar-foreground: 222.2 84% 4.9%;
+        --sidebar-primary: 221.2 83.2% 53.3%;
+        --sidebar-primary-foreground: 210 40% 98%;
+        --sidebar-accent: 210 40% 96%;
+        --sidebar-accent-foreground: 222.2 84% 4.9%;
+        --sidebar-border: 214.3 31.8% 91.4%;
+        --sidebar-ring: 221.2 83.2% 53.3%;
+    }
+
+    .dark {
+        --background: 0 0% 4%;
+        --foreground: 0 3% 92%;
+        --card: 0 0% 6%;
+        --card-foreground: 0 3% 92%;
+        --popover: 0 0% 6%;
+        --popover-foreground: 0 3% 92%;
+        --primary: 142 71% 45%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 0 0% 10%;
+        --secondary-foreground: 0 3% 92%;
+        --muted: 0 0% 10%;
+        --muted-foreground: 215 16% 62%;
+        --accent: 0 0% 10%;
+        --accent-foreground: 0 3% 92%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 0 0% 17%;
+        --input: 0 0% 17%;
+        --ring: 142 71% 45%;
+        --sidebar-background: 0 0% 4%;
+        --sidebar-foreground: 0 3% 92%;
+        --sidebar-primary: 142 71% 45%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 0 0% 10%;
+        --sidebar-accent-foreground: 0 3% 92%;
+        --sidebar-border: 0 0% 17%;
+        --sidebar-ring: 142 71% 45%;
+    }
+
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+        /* Optimize font rendering for system fonts */
+        font-optical-sizing: auto;
+        font-feature-settings:
+            'kern' 1,
+            'liga' 1;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Smooth scrolling */
+    html {
+        scroll-behavior: smooth;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        @apply bg-gray-100 dark:bg-gray-800;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        @apply rounded-full bg-gray-300 dark:bg-gray-600;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        @apply bg-gray-400 dark:bg-gray-500;
+    }
+}
+
+@layer components {
+    /* Clean card components to replace glass-card */
+    .clean-card {
+        @apply rounded-lg border border-gray-200 bg-white shadow-clean transition-all duration-200 hover:border-gray-300 hover:shadow-clean-md;
+    }
+
+    .clean-card-hover {
+        @apply rounded-lg border border-gray-200 bg-white shadow-clean transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-clean-md;
+    }
+
+    .dark .clean-card {
+        @apply border-slate-800 bg-[#0f0f0f] shadow-clean hover:border-slate-700 hover:shadow-clean-md;
+    }
+
+    .dark .clean-card-hover {
+        @apply border-slate-800 bg-[#0f0f0f] shadow-clean hover:-translate-y-0.5 hover:border-slate-700 hover:shadow-clean-md;
+    }
+
+    /* Button styles */
+    .btn-clean {
+        @apply rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-all duration-200 hover:shadow-clean-md active:scale-95;
+        font-family: var(--font-heading);
+    }
+
+    .btn-clean:hover {
+        background-color: hsl(221.2 83.2% 53.3%);
+    }
+
+    .dark .btn-clean:hover {
+        background-color: hsl(142 71% 45%);
+    }
+
+    .btn-clean-secondary {
+        @apply rounded-lg bg-secondary px-4 py-2 font-medium text-secondary-foreground transition-all duration-200 hover:bg-gray-200 hover:shadow-clean-md active:scale-95;
+        font-family: var(--font-heading);
+    }
+
+    /* Elegant text styles with refined typography */
+    .text-ui {
+        font-family: var(--font-ui);
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        line-height: 1.6;
+    }
+
+    .text-heading {
+        font-family: var(--font-heading);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        @apply text-xl text-gray-900 dark:text-white;
+    }
+
+    .text-subheading {
+        font-family: var(--font-heading);
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        line-height: 1.3;
+        @apply text-lg text-gray-700 dark:text-gray-300;
+    }
+
+    .text-body {
+        font-family: var(--font-ui);
+        font-weight: 400;
+        letter-spacing: 0.005em;
+        line-height: 1.7;
+        @apply text-base text-gray-600 dark:text-gray-400;
+    }
+
+    .text-small {
+        font-family: var(--font-ui);
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        line-height: 1.5;
+        @apply text-sm text-gray-500 dark:text-gray-500;
+    }
+
+    .text-caption {
+        font-family: var(--font-ui);
+        font-weight: 400;
+        letter-spacing: 0.02em;
+        line-height: 1.4;
+        @apply text-xs text-gray-400 dark:text-gray-500;
+    }
+
+    /* Elegant button font styles */
+    .btn-heading {
+        font-family: var(--font-heading);
+        font-weight: 500;
+        letter-spacing: 0.01em;
+    }
+
+    .nav-heading {
+        font-family: var(--font-heading);
+        font-weight: 500;
+        letter-spacing: 0.005em;
+    }
+
+    /* Elegant display headings */
+    .text-display {
+        font-family: var(--font-heading);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+    }
+
+    .text-title {
+        font-family: var(--font-heading);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        line-height: 1.15;
+    }
+}

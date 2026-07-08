@@ -1,0 +1,180 @@
+name: linter
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: write
+
+jobs:# Illuminate\Database\QueryException - Internal Server Error
+
+SQLSTATE[HY000]: General error: 1 no such column: game_matches.booking_id (Connection: sqlite, Database: /home/vol11_1/infinityfree.com/if0_42234323/htdocs/laravel/database/database.sqlite, SQL: select * from "game_matches" where "is_tallied" = 1 and exists (select * from "bookings" where "game_matches"."booking_id" = "bookings"."id" and "type" = booking))
+
+PHP 8.3.19
+Laravel 12.61.0
+dink-aomanticao.site.je
+
+## Stack Trace
+
+0 - vendor/laravel/framework/src/Illuminate/Database/Connection.php:838
+1 - vendor/laravel/framework/src/Illuminate/Database/Connection.php:794
+2 - vendor/laravel/framework/src/Illuminate/Database/Connection.php:411
+3 - vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php:3505
+4 - vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php:3490
+5 - vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php:4080
+6 - vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php:3489
+7 - vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:902
+8 - vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php:884
+9 - app/Http/Controllers/PickleballController.php:1500
+10 - app/Http/Controllers/PickleballController.php:63
+11 - vendor/laravel/framework/src/Illuminate/Routing/ControllerDispatcher.php:46
+12 - vendor/laravel/framework/src/Illuminate/Routing/Route.php:265
+13 - vendor/laravel/framework/src/Illuminate/Routing/Route.php:211
+14 - vendor/laravel/framework/src/Illuminate/Routing/Router.php:822
+15 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:180
+16 - app/Http/Middleware/EnsureRole.php:50
+17 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+18 - vendor/laravel/framework/src/Illuminate/Auth/Middleware/EnsureEmailIsVerified.php:41
+19 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+20 - app/Http/Middleware/CheckExpiredMemberships.php:27
+21 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+22 - vendor/laravel/framework/src/Illuminate/Http/Middleware/AddLinkHeadersForPreloadedAssets.php:32
+23 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+24 - vendor/inertiajs/inertia-laravel/src/Middleware.php:122
+25 - app/Http/Middleware/HandleInertiaRequests.php:24
+26 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+27 - vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php:50
+28 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+29 - vendor/laravel/framework/src/Illuminate/Auth/Middleware/Authenticate.php:63
+30 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+31 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/VerifyCsrfToken.php:87
+32 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+33 - vendor/laravel/framework/src/Illuminate/View/Middleware/ShareErrorsFromSession.php:48
+34 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+35 - vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php:120
+36 - vendor/laravel/framework/src/Illuminate/Session/Middleware/StartSession.php:63
+37 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+38 - vendor/laravel/framework/src/Illuminate/Cookie/Middleware/AddQueuedCookiesToResponse.php:36
+39 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+40 - vendor/laravel/framework/src/Illuminate/Cookie/Middleware/EncryptCookies.php:74
+41 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+42 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:137
+43 - vendor/laravel/framework/src/Illuminate/Routing/Router.php:821
+44 - vendor/laravel/framework/src/Illuminate/Routing/Router.php:800
+45 - vendor/laravel/framework/src/Illuminate/Routing/Router.php:764
+46 - vendor/laravel/framework/src/Illuminate/Routing/Router.php:753
+47 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php:200
+48 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:180
+49 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php:21
+50 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php:31
+51 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+52 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php:21
+53 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php:51
+54 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+55 - vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php:27
+56 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+57 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php:109
+58 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+59 - vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php:61
+60 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+61 - vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php:58
+62 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+63 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php:22
+64 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+65 - vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php:26
+66 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:219
+67 - vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php:137
+68 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php:175
+69 - vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php:144
+70 - vendor/laravel/framework/src/Illuminate/Foundation/Application.php:1220
+71 - /home/vol11_1/infinityfree.com/if0_42234323/htdocs/index.php:23
+
+## Request
+
+GET /dashboard
+
+## Headers
+
+* **x-xsrf-token**: eyJpdiI6IlpWNmVXU2RiNTBDcFNwcysrM0NzWnc9PSIsInZhbHVlIjoiNG1xUjVMUERzeXQzYVJmUE5QeGh0Y3dKeHZHS2RoUWNyRkxheThBMDhIajVmNGZhV0tQdld6K0ZYaTZKbDdndmhDdTArNitZZWwwS1hHZys3dGFUNDk2UVpuVWFmV0NmQ2pINW0yb01nOE5tZmR6bTM3cU1KK1pwSzZZdERHakEiLCJtYWMiOiI1N2M4ZGUxZjcwZjNlYTQzYjQ4Mjg2OTE2ODlhMTllODJkZDI1MjQ1NjljNjc0NTVkNDkyMDIwZjBiOTYyM2JiIiwidGFnIjoiIn0=
+* **host**: dink-aomanticao.site.je
+* **x-forwarded-proto**: http
+* **x-real-ip**: 112.198.161.184
+* **x-forwarded-for**: 112.198.161.184
+* **ergbyuwrethuhwefbuethwegiherguhqwef8i**: 112.198.161.184
+* **cookie**: __test=c51503395a696991960fe2ff6a6236a0; XSRF-TOKEN=eyJpdiI6IktIUXdCb2RKWmpTWFdBQXR0OW5mdmc9PSIsInZhbHVlIjoiVXBEOGlDd2hnbkYwREtsYzFFYXdoS3RrTXpNemIra2MzUVIyVGNuZHZwb21ES2dOMzJhWU9KTjl1MnZicEFsVWJPNllXQ2lIR2ZhOXAwZENTV202THNhTkNYUm5DaVNDYUJLSXlwSURjZmJVK0xYbjhZTnhKaS9ZQ2lWcjZOaFoiLCJtYWMiOiJjMzdmMDFkMzY1MmI3ZjlkZmI3OGI0MmY4Y2U2N2UwZGFiOWRhZTJjZmIwZGY1YWQzMTFiNmQ5MGQxNjdiZGFkIiwidGFnIjoiIn0%3D; laravel_session=eyJpdiI6Ik9WbisxdjVwRlhCWjJ6SWM4SVMzZWc9PSIsInZhbHVlIjoibXZ2S25oNlEveFpmWG5RKzZxc09XMUF4cnZvdmowdFZZS2ZMUENsLzAyRFZaQ2w4dld3SlIyWlN1b0N3T2dqRDVJZ0R5Q3M1MlB6QTJRSEpYd0JZejF6V0l1RVVPMWZSU2xHdEx4MTd2TmVyQWI3VFYxT21oRlcvQ3dLb1A3TngiLCJtYWMiOiJiNzcyNjA5ZGNiNTQyODBjYTVmYjkyOTljODU3MzA0MmY3MjI0M2Q0NWQ4NzEyNTg4NmU1YzQ5ZmYxZGMwY2Q2IiwidGFnIjoiIn0%3D
+* **x-inertia-version**: 95b32095019e06e9c13d44d5e28d995b
+* **x-requested-with**: XMLHttpRequest
+* **accept**: text/html, application/xhtml+xml
+* **x-inertia**: true
+* **user-agent**: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36
+* **sec-gpc**: 1
+* **accept-language**: en-US,en;q=0.9
+* **referer**: http://dink-aomanticao.site.je/admin/login
+
+## Route Context
+
+controller: App\Http\Controllers\PickleballController@dashboard
+route name: dashboard
+middleware: web, auth, verified, role:admin,scheduler
+
+## Route Parameters
+
+No route parameter data available.
+
+## Database Queries
+
+* sqlite - select * from "users" where "id" = 1 limit 1 (4 ms)
+* sqlite - select * from "system_settings" (0.18 ms)
+* sqlite - select sum("total_cost") as aggregate from "bookings" where "type" = 'booking' and "payment_status" = 'paid' and strftime('%Y-%m-%d', "booking_date") = cast('2026-06-22' as text) (0.14 ms)
+* sqlite - select sum("total_cost") as aggregate from "bookings" where "type" = 'reclub' and "payment_status" = 'paid' and strftime('%Y-%m-%d', "booking_date") = cast('2026-06-22' as text) (0.1 ms)
+* sqlite - select sum("fee_amount") as aggregate from "game_matches" where "is_walkin" = 1 and strftime('%Y-%m-%d', "match_date") = cast('2026-06-22' as text) (0.68 ms)
+* sqlite - select sum("amount") as aggregate from "membership_payments" where "revoked_at" is null and strftime('%Y-%m-%d', "paid_at") = cast('2026-06-22' as text) (0.95 ms)
+* sqlite - select sum("total_cost") as aggregate from "bookings" where "type" = 'booking' and "payment_status" = 'paid' and "booking_date" between '2026-06-22' and '2026-06-28' (0.11 ms)
+* sqlite - select sum("total_cost") as aggregate from "bookings" where "type" = 'reclub' and "payment_status" = 'paid' and "booking_date" between '2026-06-22' and '2026-06-28' (0.1 ms)
+* sqlite - select sum("fee_amount") as aggregate from "game_matches" where "is_walkin" = 1 and "match_date" between '2026-06-22' and '2026-06-28' (0.1 ms)
+* sqlite - select sum("amount") as aggregate from "membership_payments" where "revoked_at" is null and "paid_at" between '2026-06-22' and '2026-06-28' (0.09 ms)
+* sqlite - select sum("total_cost") as aggregate from "bookings" where "type" = 'booking' and "payment_status" = 'paid' and "booking_date" between '2026-06-01' and '2026-06-30' (0.11 ms)
+* sqlite - select sum("total_cost") as aggregate from "bookings" where "type" = 'reclub' and "payment_status" = 'paid' and "booking_date" between '2026-06-01' and '2026-06-30' (0.12 ms)
+* sqlite - select sum("fee_amount") as aggregate from "game_matches" where "is_walkin" = 1 and "match_date" between '2026-06-01' and '2026-06-30' (0.11 ms)
+* sqlite - select sum("amount") as aggregate from "membership_payments" where "revoked_at" is null and "paid_at" between '2026-06-01' and '2026-06-30' (0.09 ms)
+* sqlite - select count(*) as aggregate from "players" (0.08 ms)
+* sqlite - select count(*) as aggregate from "players" where "is_member" = 1 (0.09 ms)
+* sqlite - select * from "bookings" where "booking_date" >= '2026-06-22' (0.61 ms)
+* sqlite - select * from "players" order by "wins" desc limit 5 (0.23 ms)
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      - name: Install Dependencies
+        run: |
+          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+          npm install
+
+      - name: Run Pint
+        run: vendor/bin/pint
+
+      - name: Format Frontend
+        run: npm run format
+
+      - name: Lint Frontend
+        run: npm run lint
+
+      # - name: Commit Changes
+      #   uses: stefanzweifel/git-auto-commit-action@v5
+      #   with:
+      #     commit_message: fix code style
+      #     commit_options: '--no-verify'

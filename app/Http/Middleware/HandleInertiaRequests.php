@@ -70,6 +70,9 @@ class HandleInertiaRequests extends Middleware
         }
 
         $bookingInvitations = [];
+        $notifications = [];
+        $now = now();
+
         if ($user && ($user->role ?? null) === 'player' && Schema::hasTable('booking_player') && Schema::hasColumn('booking_player', 'status')) {
             $bookingInvitations = Booking::query()
                 ->with([
@@ -109,6 +112,113 @@ class HandleInertiaRequests extends Middleware
                 ->filter()
                 ->values()
                 ->all();
+
+            // Populate invitations as notification items
+            foreach ($bookingInvitations as $invite) {
+                $notifications[] = [
+                    'id' => 'invite-' . $invite['booking_id'],
+                    'type' => 'invitation',
+                    'title' => 'Booking Invitation',
+                    'message' => $invite['invited_by'] . " invited you to play at " . ($invite['venue_name'] ?? 'Venue') . " (Court " . $invite['court_number'] . ") on " . $invite['booking_date'] . " (" . substr($invite['start_time'], 0, 5) . " - " . substr($invite['end_time'], 0, 5) . ")",
+                    'created_at' => $now->toIso8601String(),
+                    'action_url' => '/scoring',
+                    'meta' => $invite,
+                ];
+            }
+
+            // Booking status updates (for players)
+            $playerBookings = Booking::where('user_id', $user->id)
+                ->whereIn('status', ['approved', 'rejected'])
+                ->where('updated_at', '>=', now()->subDays(5))
+                ->get();
+            foreach ($playerBookings as $b) {
+                $notifications[] = [
+                    'id' => 'booking-status-' . $b->id . '-' . $b->status,
+                    'type' => 'booking',
+                    'title' => 'Booking ' . ucfirst($b->status),
+                    'message' => "Your booking request for " . $b->booking_date . " on Court " . $b->court_number . " has been " . $b->status . ".",
+                    'created_at' => $b->updated_at?->toIso8601String() ?? $now->toIso8601String(),
+                    'action_url' => '/all-time-stats',
+                    'meta' => [
+                        'booking_id' => $b->id,
+                        'status' => $b->status,
+                    ]
+                ];
+            }
+
+            // Tournament Requests status updates (for players)
+            if (Schema::hasTable('tournament_requests')) {
+                $myTournamentRequests = \App\Models\TournamentRequest::where('user_id', $user->id)
+                    ->whereIn('status', ['approved', 'rejected'])
+                    ->where('updated_at', '>=', now()->subDays(5))
+                    ->get();
+                foreach ($myTournamentRequests as $tr) {
+                    $notifications[] = [
+                        'id' => 'tr-status-' . $tr->id . '-' . $tr->status,
+                        'type' => 'tournament',
+                        'title' => 'Tournament Request ' . ucfirst($tr->status),
+                        'message' => "Your tournament request '" . $tr->name . "' has been " . $tr->status . ($tr->rejection_reason ? " Reason: " . $tr->rejection_reason : ""),
+                        'created_at' => $tr->updated_at?->toIso8601String() ?? $now->toIso8601String(),
+                        'action_url' => '/tournaments',
+                        'meta' => [
+                            'request_id' => $tr->id,
+                            'status' => $tr->status,
+                        ]
+                    ];
+                }
+            }
+
+            // Membership access alerts (for players)
+            $playerProfile = Player::where('user_id', $user->id)->first();
+            if ($playerProfile && $playerProfile->is_member) {
+                if ($playerProfile->membership_expires_at && $playerProfile->membership_expires_at->diffInDays(now()) <= 30) {
+                    $notifications[] = [
+                        'id' => 'membership-expiry-' . $playerProfile->id,
+                        'type' => 'membership',
+                        'title' => 'Membership Expiring Soon',
+                        'message' => "Your annual membership will expire on " . $playerProfile->membership_expires_at->toDateString() . ". Please renew soon.",
+                        'created_at' => $now->toIso8601String(),
+                        'action_url' => '/all-time-stats',
+                    ];
+                }
+            }
+        }
+
+        // Bookings and Tournament requests (for Scheduler/Admin)
+        if ($user && in_array($user->role, ['admin', 'scheduler', 'scheduler_scorer'], true)) {
+            $pendingBookings = Booking::where('status', 'pending')
+                ->whereDate('booking_date', '>=', now()->toDateString())
+                ->get();
+            foreach ($pendingBookings as $pb) {
+                $notifications[] = [
+                    'id' => 'pending-booking-' . $pb->id,
+                    'type' => 'booking',
+                    'title' => 'Pending Booking Request',
+                    'message' => "New court booking request from " . $pb->lead_name . " on " . $pb->booking_date,
+                    'created_at' => $pb->created_at?->toIso8601String() ?? $now->toIso8601String(),
+                    'action_url' => '/bookings',
+                    'meta' => [
+                        'booking_id' => $pb->id,
+                    ]
+                ];
+            }
+
+            if (Schema::hasTable('tournament_requests')) {
+                $pendingTRs = \App\Models\TournamentRequest::where('status', 'pending')->with('user')->get();
+                foreach ($pendingTRs as $ptr) {
+                    $notifications[] = [
+                        'id' => 'pending-tr-' . $ptr->id,
+                        'type' => 'tournament',
+                        'title' => 'Pending Tournament Request',
+                        'message' => "New tournament request '" . $ptr->name . "' from " . ($ptr->user?->name ?? 'Guest'),
+                        'created_at' => $ptr->created_at?->toIso8601String() ?? $now->toIso8601String(),
+                        'action_url' => '/tournament-requests',
+                        'meta' => [
+                            'request_id' => $ptr->id,
+                        ]
+                    ];
+                }
+            }
         }
 
         $authUser = $user ? [
@@ -148,6 +258,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $authUser,
             ],
             'bookingInvitations' => $bookingInvitations,
+            'notifications' => $notifications,
         ]);
     }
 }

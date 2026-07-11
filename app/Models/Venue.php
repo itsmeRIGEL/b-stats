@@ -46,6 +46,8 @@ class Venue extends Model
         'payment_qr_photo',
     ];
 
+    protected $appends = ['logo_url', 'cover_photo_url', 'gallery_urls'];
+
     protected $casts = [
         'is_active' => 'boolean',
         'allow_past_edits' => 'boolean',
@@ -61,5 +63,37 @@ class Venue extends Model
     public function getRouteKeyName()
     {
         return 'name';
+    }
+
+    public function getLogoUrlAttribute(): ?string
+    {
+        $path = $this->logo_path;
+        if ($path && !str_starts_with($path, '/')) {
+            $path = '/storage/' . $path;
+        }
+        return $path;
+    }
+
+    public function getCoverPhotoUrlAttribute(): ?string
+    {
+        $path = $this->cover_photo_path;
+        if ($path && !str_starts_with($path, '/')) {
+            $path = '/storage/' . $path;
+        }
+        return $path;
+    }
+
+    public function getGalleryUrlsAttribute(): ?array
+    {
+        $paths = $this->gallery_paths;
+        if (!is_array($paths)) {
+            return $paths;
+        }
+        return array_map(function ($path) {
+            if ($path && !str_starts_with($path, '/')) {
+                return '/storage/' . $path;
+            }
+            return $path;
+        }, $paths);
     }
 }

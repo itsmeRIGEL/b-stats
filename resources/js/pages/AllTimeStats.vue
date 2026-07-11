@@ -16,6 +16,7 @@ import {
     Trophy,
     User,
     X,
+    MapPin,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Calendar, MapPin, Phone, Send, ShieldCheck, Swords, X } from 'lucide-vue-next';
+import { Calendar, ChevronLeft, ChevronRight, MapPin, Phone, Send, ShieldCheck, Swords, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -15,6 +15,7 @@ const props = defineProps<{
         covered_court_count?: number | null;
         cover_photo_url?: string | null;
         logo_url?: string | null;
+        gallery_urls?: string[];
         amenities?: string[];
         default_hourly_rate?: number;
         contact_phone?: string | null;
@@ -52,6 +53,44 @@ const props = defineProps<{
 
 const selectedVenueId = ref<number | null>(null);
 const selectedVenue = computed(() => props.venues.find((venue) => venue.id === selectedVenueId.value) || null);
+
+const now = new Date();
+const today = now.toISOString().slice(0, 10);
+const currentTime = now.toTimeString().slice(0, 8);
+
+const currentBooking = computed(() => {
+    return props.bookings
+        .filter((b) => {
+            if (b.status === 'cancelled' || b.status === 'rejected') return false;
+            if (b.booking_date > today) return true;
+            if (b.booking_date < today) return false;
+            return b.end_time > currentTime;
+        })
+        .sort((a, b) => {
+            if (a.booking_date === b.booking_date) return a.start_time.localeCompare(b.start_time);
+            return a.booking_date.localeCompare(b.booking_date);
+        })[0] ?? null;
+});
+
+const previousBookings = computed(() => {
+    if (!currentBooking.value) return props.bookings;
+    return props.bookings.filter((b) => b.id !== currentBooking.value!.id);
+});
+
+const previousIndex = ref(0);
+const visiblePreviousBooking = computed(() => previousBookings.value[previousIndex.value] ?? null);
+const hasPrevious = computed(() => previousIndex.value > 0);
+const hasNext = computed(() => previousIndex.value < previousBookings.value.length - 1);
+
+const goNext = () => { if (hasNext.value) previousIndex.value++; };
+const goPrev = () => { if (hasPrevious.value) previousIndex.value-- };
+
+const requestIndex = ref(0);
+const visibleRequest = computed(() => props.requests[requestIndex.value] ?? null);
+const hasReqPrevious = computed(() => requestIndex.value > 0);
+const hasReqNext = computed(() => requestIndex.value < props.requests.length - 1);
+const goReqNext = () => { if (hasReqNext.value) requestIndex.value++; };
+const goReqPrev = () => { if (hasReqPrevious.value) requestIndex.value-- };
 
 const form = useForm({
     venue_id: null as number | null,
@@ -167,6 +206,17 @@ const bookingStatusClass = (status: string) => {
                                 {{ venue.description || 'This venue is ready for bookings. Open the booking page to see the live schedule and choose your court.' }}
                             </p>
 
+                            <!-- Gallery strip -->
+                            <div v-if="venue.gallery_urls && venue.gallery_urls.length" class="mt-4 grid grid-cols-4 gap-2">
+                                <div
+                                    v-for="(img, idx) in venue.gallery_urls.slice(0, 4)"
+                                    :key="idx"
+                                    class="h-20 overflow-hidden rounded-xl border border-slate-100 bg-slate-100 dark:border-[#1a1a1a] dark:bg-[#090909]"
+                                >
+                                    <img :src="img" :alt="`${venue.name} gallery ${idx + 1}`" class="h-full w-full object-cover" />
+                                </div>
+                            </div>
+
                             <div class="mt-5 grid gap-3 sm:grid-cols-3">
                                 <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-[#0a0a0a]">
                                     <p class="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Courts</p>
@@ -223,45 +273,68 @@ const bookingStatusClass = (status: string) => {
 
                 <aside class="space-y-6">
                     <section class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-[#1a1a1a] dark:bg-[#0f0f0f]">
-                        <h2 class="text-lg font-black text-slate-900 dark:text-white">My Tournament Requests</h2>
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-black text-slate-900 dark:text-white">My Tournament Requests</h2>
+                            <div v-if="requests.length > 1" class="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    :disabled="!hasReqPrevious"
+                                    @click="goReqPrev"
+                                    class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-[#1a1a1a] dark:text-slate-400 dark:hover:bg-[#171717]"
+                                >
+                                    <ChevronLeft class="h-3.5 w-3.5" />
+                                </button>
+                                <span class="min-w-[3rem] text-center text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                                    {{ requestIndex + 1 }}/{{ requests.length }}
+                                </span>
+                                <button
+                                    type="button"
+                                    :disabled="!hasReqNext"
+                                    @click="goReqNext"
+                                    class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-[#1a1a1a] dark:text-slate-400 dark:hover:bg-[#171717]"
+                                >
+                                    <ChevronRight class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        </div>
                         <div class="mt-4 space-y-3">
                             <div
-                                v-for="requestItem in requests"
-                                :key="requestItem.id"
+                                v-if="visibleRequest"
+                                :key="visibleRequest.id"
                                 class="rounded-2xl border border-slate-200 p-4 dark:border-[#1a1a1a]"
                             >
                                 <div class="flex items-start justify-between gap-3">
                                     <div>
-                                        <p class="font-bold text-slate-900 dark:text-white">{{ requestItem.name }}</p>
-                                        <p class="text-sm text-slate-500 dark:text-slate-400">{{ requestItem.venue?.name }}</p>
+                                        <p class="font-bold text-slate-900 dark:text-white">{{ visibleRequest.name }}</p>
+                                        <p class="text-sm text-slate-500 dark:text-slate-400">{{ visibleRequest.venue?.name }}</p>
                                     </div>
                                     <span
                                         class="rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider"
                                         :class="
-                                            requestItem.status === 'approved'
+                                            visibleRequest.status === 'approved'
                                                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                                                : requestItem.status === 'rejected'
+                                                : visibleRequest.status === 'rejected'
                                                   ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
                                                   : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
                                         "
                                     >
-                                        {{ requestItem.status }}
+                                        {{ visibleRequest.status }}
                                     </span>
                                 </div>
                                 <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                                    <span v-if="requestItem.preferred_date" class="inline-flex items-center gap-1">
+                                    <span v-if="visibleRequest.preferred_date" class="inline-flex items-center gap-1">
                                         <Calendar class="h-3.5 w-3.5" />
-                                        {{ requestItem.preferred_date }}
+                                        {{ visibleRequest.preferred_date }}
                                     </span>
-                                    <span v-if="requestItem.preferred_start_time">{{ requestItem.preferred_start_time }}</span>
+                                    <span v-if="visibleRequest.preferred_start_time">{{ visibleRequest.preferred_start_time }}</span>
                                 </div>
-                                <p v-if="requestItem.notes" class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ requestItem.notes }}</p>
-                                <p v-if="requestItem.rejection_reason" class="mt-3 text-sm text-rose-600 dark:text-rose-300">{{ requestItem.rejection_reason }}</p>
-                                <p v-if="requestItem.tournamentDay && !requestItem.tournament" class="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
-                                    Approved main folder ready: {{ requestItem.tournamentDay.name }} ({{ requestItem.tournamentDay.status }})
+                                <p v-if="visibleRequest.notes" class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ visibleRequest.notes }}</p>
+                                <p v-if="visibleRequest.rejection_reason" class="mt-3 text-sm text-rose-600 dark:text-rose-300">{{ visibleRequest.rejection_reason }}</p>
+                                <p v-if="visibleRequest.tournamentDay && !visibleRequest.tournament" class="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
+                                    Approved main folder ready: {{ visibleRequest.tournamentDay.name }} ({{ visibleRequest.tournamentDay.status }})
                                 </p>
-                                <p v-if="requestItem.tournament" class="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
-                                    Tournament access: {{ requestItem.tournament.name }} ({{ requestItem.tournament.status }})
+                                <p v-if="visibleRequest.tournament" class="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
+                                    Tournament access: {{ visibleRequest.tournament.name }} ({{ visibleRequest.tournament.status }})
                                 </p>
                             </div>
                             <p v-if="requests.length === 0" class="text-sm text-slate-500 dark:text-slate-400">No tournament requests yet.</p>
@@ -275,36 +348,93 @@ const bookingStatusClass = (status: string) => {
                         </p>
 
                         <div class="mt-4 space-y-3">
-                            <div
-                                v-for="booking in bookings"
-                                :key="booking.id"
-                                class="rounded-2xl border border-slate-200 p-4 dark:border-[#1a1a1a]"
-                            >
-                                <div class="flex items-start justify-between gap-3">
-                                    <div>
-                                        <p class="font-bold text-slate-900 dark:text-white">{{ booking.venue_name || 'Venue booking' }}</p>
-                                        <p class="text-sm text-slate-500 dark:text-slate-400">{{ booking.player_username }}</p>
+                            <template v-if="currentBooking">
+                                <p class="text-xs font-black uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Current</p>
+                                <div class="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-800/40 dark:bg-emerald-900/10">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p class="font-bold text-slate-900 dark:text-white">{{ currentBooking.venue_name || 'Venue booking' }}</p>
+                                            <p class="text-sm text-slate-500 dark:text-slate-400">{{ currentBooking.player_username }}</p>
+                                        </div>
+                                        <span
+                                            class="rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider"
+                                            :class="bookingStatusClass(currentBooking.status)"
+                                        >
+                                            {{ currentBooking.status }}
+                                        </span>
                                     </div>
-                                    <span
-                                        class="rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider"
-                                        :class="bookingStatusClass(booking.status)"
-                                    >
-                                        {{ booking.status }}
-                                    </span>
-                                </div>
 
-                                <div class="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                                    <p class="inline-flex items-center gap-2">
-                                        <Calendar class="h-4 w-4 text-blue-600 dark:text-green-400" />
-                                        <span>{{ booking.booking_date }} · {{ booking.start_time }} - {{ booking.end_time }}</span>
-                                    </p>
-                                    <p>Court {{ booking.court_number }} · {{ booking.player_count }} players · {{ booking.client_type || 'booking' }}</p>
-                                    <p>Total: PHP {{ Number(booking.total_cost).toFixed(2) }}</p>
-                                    <p v-if="booking.payment_status" class="text-xs uppercase tracking-wider text-slate-400">
-                                        Payment: {{ booking.payment_status }}
-                                    </p>
+                                    <div class="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                                        <p class="inline-flex items-center gap-2">
+                                            <Calendar class="h-4 w-4 text-blue-600 dark:text-green-400" />
+                                            <span>{{ currentBooking.booking_date }} · {{ currentBooking.start_time }} - {{ currentBooking.end_time }}</span>
+                                        </p>
+                                        <p>Court {{ currentBooking.court_number }} · {{ currentBooking.player_count }} players · {{ currentBooking.client_type || 'booking' }}</p>
+                                        <p>Total: PHP {{ Number(currentBooking.total_cost).toFixed(2) }}</p>
+                                        <p v-if="currentBooking.payment_status" class="text-xs uppercase tracking-wider text-slate-400">
+                                            Payment: {{ currentBooking.payment_status }}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
+                            </template>
+
+                            <template v-if="previousBookings.length > 0">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Previous</p>
+                                    <div class="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            :disabled="!hasPrevious"
+                                            @click="goPrev"
+                                            class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-[#1a1a1a] dark:text-slate-400 dark:hover:bg-[#171717]"
+                                        >
+                                            <ChevronLeft class="h-3.5 w-3.5" />
+                                        </button>
+                                        <span class="min-w-[3rem] text-center text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                                            {{ previousIndex + 1 }}/{{ previousBookings.length }}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            :disabled="!hasNext"
+                                            @click="goNext"
+                                            class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-[#1a1a1a] dark:text-slate-400 dark:hover:bg-[#171717]"
+                                        >
+                                            <ChevronRight class="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div
+                                    v-if="visiblePreviousBooking"
+                                    :key="visiblePreviousBooking.id"
+                                    class="rounded-2xl border border-slate-200 p-4 dark:border-[#1a1a1a]"
+                                >
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p class="font-bold text-slate-900 dark:text-white">{{ visiblePreviousBooking.venue_name || 'Venue booking' }}</p>
+                                            <p class="text-sm text-slate-500 dark:text-slate-400">{{ visiblePreviousBooking.player_username }}</p>
+                                        </div>
+                                        <span
+                                            class="rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider"
+                                            :class="bookingStatusClass(visiblePreviousBooking.status)"
+                                        >
+                                            {{ visiblePreviousBooking.status }}
+                                        </span>
+                                    </div>
+
+                                    <div class="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                                        <p class="inline-flex items-center gap-2">
+                                            <Calendar class="h-4 w-4 text-blue-600 dark:text-green-400" />
+                                            <span>{{ visiblePreviousBooking.booking_date }} · {{ visiblePreviousBooking.start_time }} - {{ visiblePreviousBooking.end_time }}</span>
+                                        </p>
+                                        <p>Court {{ visiblePreviousBooking.court_number }} · {{ visiblePreviousBooking.player_count }} players · {{ visiblePreviousBooking.client_type || 'booking' }}</p>
+                                        <p>Total: PHP {{ Number(visiblePreviousBooking.total_cost).toFixed(2) }}</p>
+                                        <p v-if="visiblePreviousBooking.payment_status" class="text-xs uppercase tracking-wider text-slate-400">
+                                            Payment: {{ visiblePreviousBooking.payment_status }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </template>
+
                             <p v-if="bookings.length === 0" class="text-sm text-slate-500 dark:text-slate-400">No booked schedules yet.</p>
                         </div>
                     </section>

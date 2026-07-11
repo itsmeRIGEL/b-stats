@@ -100,6 +100,7 @@ class TournamentRequestController extends Controller
                         'covered_court_count' => $venue->covered_court_count ? (int) $venue->covered_court_count : null,
                         'cover_photo_url' => $this->publicStorageUrl($venue->cover_photo_path),
                         'logo_url' => $this->publicStorageUrl($venue->logo_path),
+                        'gallery_urls' => $venue->gallery_urls ?? [],
                         'amenities' => $amenities,
                         'default_hourly_rate' => (float) ($venue->default_hourly_rate ?? 0),
                         'contact_phone' => $venue->contact_phone,

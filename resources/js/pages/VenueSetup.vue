@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Building2, Camera, Clock3, ImagePlus, Mail, MapPin, Phone, Save, Tag, Trophy } from 'lucide-vue-next';
+import { Building2, Camera, Clock3, ImagePlus, Mail, MapPin, Phone, Save, Tag, Trophy, Plus, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -30,7 +30,18 @@ const props = defineProps<{
 
 const logoPreview = ref(props.venue?.logo_url ?? '');
 const coverPreview = ref(props.venue?.cover_photo_url ?? '');
-const galleryPreview = ref<string[]>(props.venue?.gallery_urls ?? []);
+
+interface GalleryItem {
+    type: 'existing' | 'new';
+    url: string;
+    file?: File;
+}
+
+const galleryItems = ref<GalleryItem[]>(
+    (props.venue?.gallery_urls ?? []).map((url) => ({ type: 'existing', url }))
+);
+
+const galleryPreview = computed(() => galleryItems.value.map((item) => item.url));
 
 const form = useForm({
     name: props.venue?.name ?? '',
@@ -45,6 +56,7 @@ const form = useForm({
     logo_photo: null as File | null,
     cover_photo: null as File | null,
     gallery_photos: [] as File[],
+    existing_gallery_paths: '' as string,
 });
 
 const title = computed(() => (props.venue ? 'Venue Setup' : 'Create your venue profile'));
@@ -105,11 +117,31 @@ const updateSinglePreview = (event: Event, type: 'logo' | 'cover') => {
 const updateGalleryPreview = (event: Event) => {
     const target = event.target as HTMLInputElement;
     const files = Array.from(target.files ?? []);
-    form.gallery_photos = files;
-    galleryPreview.value = files.map((file) => URL.createObjectURL(file));
+    files.forEach((file) => {
+        galleryItems.value.push({
+            type: 'new',
+            file,
+            url: URL.createObjectURL(file),
+        });
+    });
+};
+
+const removePhoto = (index: number) => {
+    galleryItems.value.splice(index, 1);
 };
 
 const submit = () => {
+    form.gallery_photos = galleryItems.value
+        .filter((item) => item.type === 'new')
+        .map((item) => item.file as File);
+
+    // Serialize as JSON string so FormData transmits it intact
+    form.existing_gallery_paths = JSON.stringify(
+        galleryItems.value
+            .filter((item) => item.type === 'existing')
+            .map((item) => item.url)
+    );
+
     form.post(route('venue-setup.store'));
 };
 </script>
@@ -279,29 +311,40 @@ const submit = () => {
                             </label>
                         </div>
 
-                        <label class="group grid gap-3 rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5 transition hover:border-blue-400 hover:bg-blue-50/40 dark:border-[#262626] dark:bg-[#0a0a0a] dark:hover:border-green-500 dark:hover:bg-green-950/10">
+                        <div class="grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
                             <span class="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-white">
                                 <ImagePlus class="h-4 w-4" />
                                 Venue gallery
                             </span>
                             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                <!-- Existing / newly selected photo thumbnails with remove button -->
                                 <div
                                     v-for="(image, index) in galleryPreview"
                                     :key="`${image}-${index}`"
-                                    class="h-36 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-[#1a1a1a] dark:bg-[#050505]"
+                                    class="group/item relative h-36 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-[#1a1a1a] dark:bg-[#050505]"
                                 >
                                     <img :src="image" :alt="`Gallery preview ${index + 1}`" class="h-full w-full object-cover" />
+                                    <button
+                                        type="button"
+                                        @click="removePhoto(index)"
+                                        class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity hover:bg-black/75 group-hover/item:opacity-100"
+                                        title="Remove photo"
+                                    >
+                                        <X class="h-3.5 w-3.5" />
+                                    </button>
                                 </div>
-                                <div
-                                    v-if="galleryPreview.length === 0"
-                                    class="flex h-36 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-400 dark:border-[#1a1a1a] dark:bg-[#050505]"
+
+                                <!-- Add photo card — the ONLY thing that opens the file picker -->
+                                <label
+                                    class="group/add flex h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-xs font-semibold text-slate-400 transition-colors hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 dark:border-[#262626] dark:bg-[#050505] dark:hover:border-green-500 dark:hover:bg-green-950/10 dark:hover:text-green-400"
                                 >
-                                    Add 1 to 4 venue photos
-                                </div>
+                                    <Plus class="mb-2 h-6 w-6" />
+                                    <span>Add photo</span>
+                                    <input type="file" accept="image/*" multiple class="hidden" @change="updateGalleryPreview" />
+                                </label>
                             </div>
-                            <input type="file" accept="image/*" multiple class="hidden" @change="updateGalleryPreview" />
-                            <p class="text-xs text-slate-500 dark:text-slate-400">Selecting new gallery photos replaces the current gallery set.</p>
-                        </label>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Click a photo to remove it. Click <strong>Add photo</strong> to upload more.</p>
+                        </div>
 
                         <div class="flex items-center justify-between gap-3 border-t border-slate-200 pt-5 dark:border-[#1a1a1a]">
                             <p class="text-xs text-slate-500 dark:text-slate-400">
@@ -360,7 +403,7 @@ const submit = () => {
                                 <div class="rounded-2xl bg-slate-50 p-4 dark:bg-[#0a0a0a]">
                                     <p class="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Rate</p>
                                     <p class="mt-2 text-lg font-black text-slate-900 dark:text-white">
-                                        PHP {{ props.venue?.default_hourly_rate?.toFixed(0) || '0' }}/hr
+                                        PHP {{ Number(props.venue?.default_hourly_rate ?? 0).toFixed(0) || '0' }}/hr
                                     </p>
                                     <p class="text-xs text-slate-500 dark:text-slate-400">Uses your scheduler pricing settings</p>
                                 </div>

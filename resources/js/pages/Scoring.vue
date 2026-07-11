@@ -240,11 +240,28 @@ const derivedBookingRosterPlayers = computed<SessionPlayer[]>(() => {
 const derivedTemporaryMatchPlayers = computed<SessionPlayer[]>(() => {
     const temporaryNames = new Set<string>();
 
+    const existingNames = new Set<string>();
+    [
+        ...props.players,
+        ...derivedBookingRosterPlayers.value,
+        ...localRegisteredSessionPlayers.value,
+        ...tempSessionPlayers.value
+    ].forEach((p) => {
+        if (p && p.name) {
+            existingNames.add(normalizePlayerName(p.name));
+        }
+    });
+
     for (const match of localMatches.value) {
         [match.player_1_name, match.player_2_name, match.player_3_name, match.player_4_name]
             .map((name) => String(name ?? '').trim())
             .filter((name) => name !== '')
-            .forEach((name) => temporaryNames.add(name));
+            .forEach((name) => {
+                const normalized = normalizePlayerName(name);
+                if (!existingNames.has(normalized)) {
+                    temporaryNames.add(name);
+                }
+            });
     }
 
     return Array.from(temporaryNames).map((name, index) => ({
@@ -376,11 +393,16 @@ const showReplacePlayerModal = ref(false);
 const replacingSlot = ref<'p1' | 'p2' | 'p3' | 'p4' | null>(null);
 const replacementPlayerId = ref<number | null>(null);
 
+let alertTimeout: any = null;
 const showSystemAlert = (message: string, tone: 'info' | 'error' = 'info') => {
     appAlert.value = { message, tone };
-    window.setTimeout(() => {
+    if (alertTimeout) {
+        window.clearTimeout(alertTimeout);
+    }
+    alertTimeout = window.setTimeout(() => {
         appAlert.value = null;
-    }, 3200);
+        alertTimeout = null;
+    }, 5000);
 };
 
 const openSystemConfirm = (message: string, action: () => void) => {
@@ -799,6 +821,24 @@ const removeFromSession = (playerId: number) => {
         return;
     }
 
+    const isLeadPlayer = isPlayerScoringMode.value && !isPlayerScoringViewOnly.value;
+    if (isLeadPlayer) {
+        if (sessionStarted.value) {
+            showSystemAlert('Cannot remove players once the session has started.', 'error');
+            return;
+        }
+        router.post(route('players.remove-from-session', playerId), {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                const newSet = new Set(activePlayerIds.value);
+                newSet.delete(playerId);
+                activePlayerIds.value = newSet;
+                saveQueueState();
+            }
+        });
+        return;
+    }
+
     if (!canManageVenueRoster.value) {
         showSystemAlert('You can remove only players added inside your booking session.', 'error');
         return;
@@ -825,8 +865,12 @@ const filteredPlayers = computed(() => {
 
 const modalFilteredPlayers = computed(() => {
     const query = addPlayerSearch.value.trim().toLowerCase();
+    const temps = tempSessionPlayers.value.filter((p) => {
+        if (!query) return true;
+        return p.name.toLowerCase().includes(query);
+    });
     const list = query ? props.allPlayers.filter((p) => p.name.toLowerCase().includes(query)) : props.allPlayers;
-    return list.slice(0, 30);
+    return [...temps, ...list].slice(0, 30);
 });
 
 const rosterPlayerIds = computed(() => new Set(sessionPlayers.value.map((p) => p.id)));
@@ -1167,6 +1211,12 @@ const removePlayerFromGroup = (playerId: number) => {
 };
 
 const canRemoveSessionPlayer = (player: SessionPlayer) => {
+    const isLeadPlayer = isPlayerScoringMode.value && !isPlayerScoringViewOnly.value;
+    if (isLeadPlayer) {
+        const currentUserId = (page.props as any).auth?.user?.id;
+        const isSelf = player.user_id === currentUserId || player.user?.id === currentUserId;
+        return !isSelf;
+    }
     return player.id < 0 || localRegisteredSessionPlayers.value.some((entry) => entry.id === player.id) || canManageVenueRoster.value;
 };
 
@@ -1191,7 +1241,7 @@ const addTemporaryPlayerFromModal = () => {
 
     tryAutoGenerateFirstMatch();
     saveQueueState();
-    closeAddPlayerModal();
+    addPlayerSearch.value = '';
     showSystemAlert(`${temporaryPlayer.name} added as a temporary player. Stats will not be saved.`, 'info');
 };
 
@@ -1212,7 +1262,8 @@ const applySelectedRegisteredPlayers = () => {
             only: ['players', 'allPlayers', 'bookingRoster', 'bookingInvitations'],
             onSuccess: () => {
                 applyingSelectedPlayers.value = false;
-                closeAddPlayerModal();
+                selectedModalPlayerIds.value.clear();
+                addPlayerSearch.value = '';
                 showSystemAlert(`${allNames.length} player invitation(s) sent.`, 'info');
                 invitePlayersForm.reset();
             },
@@ -1245,6 +1296,8 @@ const applySelectedRegisteredPlayers = () => {
 
                 tryAutoGenerateFirstMatch();
                 saveQueueState();
+                selectedModalPlayerIds.value.clear();
+                addPlayerSearch.value = '';
                 applyingSelectedPlayers.value = false;
                 showSystemAlert(`${allNames.length} players added to session.`, 'info');
             },
@@ -1497,6 +1550,10 @@ const handleStartMatchClick = () => {
     }
     if (isQueueLocked.value) {
         showSystemAlert('Queue is locked. Booking has expired.', 'error');
+        return;
+    }
+    if (matchStarted.value || currentMatch.value) {
+        showSystemAlert('A match is already active.', 'info');
         return;
     }
     if (queuedMatches.value.length === 0) {
@@ -1957,7 +2014,9 @@ const submitScore = () => {
             onSuccess: () => {
                 showScoringModal.value = false;
                 scoringMatchDetails.value = null;
-                advanceToNextMatch();
+                currentMatch.value = null;
+                matchStarted.value = false;
+                saveQueueState();
                 router.reload({ only: ['matches', 'players'] });
             },
         });
@@ -2071,6 +2130,37 @@ watch(
     },
     { deep: true },
 );
+
+watch(isQueueLocked, (locked) => {
+    if (locked && canSaveSession.value && canEditScoringBoard.value) {
+        localMatches.value = [];
+        activePlayerIds.value = new Set();
+        localRegisteredSessionPlayers.value = [];
+        tempSessionPlayers.value = [];
+        queuedMatches.value = [];
+        currentMatch.value = null;
+        matchStarted.value = false;
+        sessionStarted.value = false;
+        lateJoinerOffsets.value = {};
+        playerPairs.value = {};
+        playerGroups.value = [
+            { type: 'none', playerIds: [] }
+        ];
+        if (sharedScoringStateSyncEnabled.value) {
+            void persistSharedScoringState(null);
+        } else {
+            localStorage.removeItem(scoringQueueStorageKey.value);
+        }
+
+        saveSessionForm.post(route('scoring.save'), {
+            preserveScroll: true,
+            preserveState: false,
+            onSuccess: () => {
+                showSystemAlert('Session has expired and matches have been automatically saved.', 'info');
+            }
+        });
+    }
+});
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 const POLL_RELOAD = ['matches', 'players', 'allPlayers', 'assignedCourts', 'activeBookings', 'bookingRoster', 'scoringState', 'playerScoringNotice', 'upcomingNotice', 'settings'];
 
@@ -2160,7 +2250,7 @@ onUnmounted(() => {
                         <span class="hidden sm:inline opacity-30">|</span>
                         <p class="text-xs opacity-90 font-bold">
                             {{ isTimeFullyExpired
-                                ? `The booking for ${activeBookingForSelectedCourt?.lead_name || 'Client'} has expired. Queue controls are locked. Please input the final score and save the session.`
+                                ? `The booking for ${activeBookingForSelectedCourt?.lead_name || 'Client'} has expired. Queue controls are not locked and the data of the match is automatically saved.`
                                 : `The booking for ${activeBookingForSelectedCourt?.lead_name || 'Client'} ends in ${minutesRemaining} minutes (${formatTime12h(activeBookingForSelectedCourt?.end_time)}).`
                             }}
                         </p>
@@ -2239,7 +2329,7 @@ onUnmounted(() => {
                                     v-if="!isPlayerScoringViewOnly && (queuedMatches.length > 0 || activePlayerIds.size >= 2)"
                                     type="button"
                                     @click="handleStartMatchClick"
-                                    :disabled="isQueueLocked || isPlayerScoringViewOnly"
+                                    :disabled="isQueueLocked || isPlayerScoringViewOnly || matchStarted"
                                     class="mt-2 rounded-2xl bg-emerald-500 px-8 py-3 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-500/30 transition-all hover:bg-emerald-600 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-500"
                                 >
                                     Start Match

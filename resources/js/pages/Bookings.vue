@@ -1621,7 +1621,6 @@ const copyBookingLink = async () => {
                                                 <Edit class="h-4 w-4" />
                                             </button>
                                             <button
-                                                v-if="isAdmin"
                                                 @click="deleteBooking(booking)"
                                                 class="rounded-xl bg-slate-100 p-1.5 text-slate-600 transition-all hover:bg-red-600 hover:text-white dark:bg-slate-800 dark:text-slate-400"
                                             >
@@ -1813,7 +1812,6 @@ const copyBookingLink = async () => {
                                                         <Edit class="h-3.5 w-3.5" />
                                                     </button>
                                                     <button
-                                                        v-if="isAdmin"
                                                         @click="deleteBooking(booking)"
                                                         class="rounded-lg bg-slate-100 p-1.5 text-slate-600 transition-all hover:bg-red-600 hover:text-white dark:bg-slate-800 dark:text-slate-400"
                                                     >
@@ -2083,7 +2081,7 @@ const copyBookingLink = async () => {
                                             <span class="text-[8px] font-bold text-slate-400 dark:text-slate-500 mt-0.5" :class="{'text-white/80 dark:text-white/80': slot.isSelected}">to {{ formatTime12h(slot.end).replace(':00', '') }}</span>
                                             
                                             <span 
-                                                v-if="slot.isBooked && slot.booking && isAdmin" 
+                                                v-if="slot.isBooked && slot.booking" 
                                                 class="text-[8px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 mt-0.5 truncate max-w-full"
                                             >
                                                 {{ slot.booking.lead_name }}

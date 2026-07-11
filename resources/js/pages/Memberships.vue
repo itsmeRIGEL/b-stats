@@ -29,7 +29,8 @@ const filteredPlayers = computed(() => {
     return props.players.filter((p) => 
         p.name.toLowerCase().includes(q) || 
         (p.full_name && p.full_name.toLowerCase().includes(q)) ||
-        (p.phone && p.phone.toLowerCase().includes(q))
+        (p.phone && p.phone.toLowerCase().includes(q)) ||
+        (p.user?.username && p.user.username.toLowerCase().includes(q))
     );
 });
 
@@ -38,7 +39,7 @@ const props = defineProps<{
     settings?: Record<string, string>;
 }>();
 
-const displayPlayerName = (player: any) => player?.username || player?.name || 'Player';
+const displayPlayerName = (player: any) => player?.user?.username || player?.name || 'Player';
 const displayUsername = (player: any) => player?.username || player?.name || 'Not provided';
 const hasLinkedAccount = (player: any) => Boolean(player?.user_id);
 
@@ -112,13 +113,13 @@ const revokeDue = (player: any) => {
     });
 };
 
-const deletePlayer = (player: any) => {
+const revokeMembership = (player: any) => {
     const playerName = displayPlayerName(player);
-    if (!window.confirm(`Delete ${playerName} from the roster?`)) {
+    if (!window.confirm(`Revoke membership for ${playerName}? Their player data will be kept.`)) {
         return;
     }
 
-    router.delete(route('players.destroy', player.id), {
+    router.post(route('memberships.toggle', player.id), {}, {
         preserveScroll: true,
         onSuccess: () => {
             if (selectedPlayer.value?.id === player.id) {
@@ -126,10 +127,10 @@ const deletePlayer = (player: any) => {
                 selectedPlayer.value = null;
                 isEditing.value = false;
             }
-            triggerToast(`${playerName} deleted from the roster.`);
+            triggerToast(`Membership revoked for ${playerName}.`);
         },
         onError: () => {
-            triggerToast(`Failed to delete ${playerName}.`);
+            triggerToast(`Failed to revoke membership for ${playerName}.`);
         },
     });
 };
@@ -879,11 +880,12 @@ onUnmounted(() => {
                             <!-- Fixed buttons (View Mode) -->
                             <div v-if="!isEditing" class="flex shrink-0 gap-3 pb-safe pt-4">
                                 <button
-                                    @click="deletePlayer(selectedPlayer)"
+                                    v-if="selectedPlayer?.is_member"
+                                    @click="revokeMembership(selectedPlayer)"
                                     class="flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3.5 text-[11px] font-black uppercase tracking-widest text-rose-600 transition-all hover:border-rose-300 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/30"
                                 >
                                     <Trash2 class="h-4 w-4" />
-                                    Delete
+                                    Revoke Membership
                                 </button>
                                 <button
                                     @click="startEditing"

@@ -26,6 +26,8 @@ import {
     User,
     Users,
     X,
+    Mail,
+    Facebook,
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { SharedData } from '@/types';
@@ -1132,59 +1134,24 @@ onUnmounted(() => {
                                     <MapPin class="mt-0.5 h-4 w-4 shrink-0" />
                                     <span>{{ props.venue?.address || 'Venue address will be shown here.' }}</span>
                                 </p>
+                                <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
+                                    <p v-if="props.venue?.contact_phone" class="flex items-center gap-1.5">
+                                        <Phone class="h-4 w-4 shrink-0 text-slate-400" />
+                                        <span>{{ props.venue.contact_phone }}</span>
+                                    </p>
+                                    <p v-if="props.venue?.contact_email" class="flex items-center gap-1.5">
+                                        <Mail class="h-4 w-4 shrink-0 text-slate-400" />
+                                        <a :href="`mailto:${props.venue.contact_email}`" class="hover:text-emerald-500 transition-colors">{{ props.venue.contact_email }}</a>
+                                    </p>
+                                    <p v-if="props.venue?.facebook_url" class="flex items-center gap-1.5">
+                                        <Facebook class="h-4 w-4 shrink-0 text-slate-400" />
+                                        <a :href="props.venue.facebook_url" target="_blank" rel="noopener noreferrer" class="hover:text-emerald-500 transition-colors">Facebook Page</a>
+                                    </p>
+                                </div>
                                 <p class="mt-4 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                                     {{ props.venue?.description || 'Reserve your court, explore the schedule, and enjoy a smooth booking flow from this venue page.' }}
                                 </p>
                             </div>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                            <button
-                                @click="showStatsModal = true"
-                                class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 transition-all dark:border-slate-800 dark:bg-[#1a1a1a] dark:text-slate-300 dark:hover:bg-[#2a2a2a]"
-                            >
-                                <Trophy class="h-3.5 w-3.5 text-amber-500" />
-                                <span>Leaderboard</span>
-                            </button>
-                            <div
-                                v-if="operationalHours"
-                                class="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300"
-                            >
-                                <Clock class="h-3.5 w-3.5 shrink-0" />
-                                <span>{{ operationalHours }}</span>
-                            </div>
-                            <div
-                                class="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
-                            >
-                                <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-                                Approved
-                            </div>
-                            <div
-                                v-if="isLoggedInPlayer"
-                                class="inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300"
-                            >
-                                <User class="h-3.5 w-3.5 shrink-0" />
-                                Player viewing venue
-                            </div>
-                            <div
-                                class="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
-                            >
-                                <span class="h-2 w-2 rounded-full bg-amber-400"></span>
-                                Pending
-                            </div>
-                            <div
-                                class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800/20 dark:text-slate-500"
-                            >
-                                <span class="h-2 w-2 rounded-full bg-slate-300 ring-1 ring-slate-400"></span>
-                                Cancelled
-                            </div>
-                            <button
-                                @click="toggleTheme"
-                                class="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-[#1a1a1a] dark:text-slate-300 dark:hover:bg-[#2a2a2a]"
-                                :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-                            >
-                                <Sun v-if="isDark" class="h-4 w-4" />
-                                <Moon v-else class="h-4 w-4" />
-                            </button>
                         </div>
                     </div>
 
@@ -1235,12 +1202,62 @@ onUnmounted(() => {
             >
                 <!-- Calendar Header -->
                 <div
-                    class="flex flex-row items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#0a0a0a] sm:p-5"
+                    class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#0a0a0a] sm:p-5 md:flex-row md:items-center md:justify-between"
                 >
-                    <h2 class="text-heading flex items-center text-base font-black text-slate-900 dark:text-[#EDEDEC] sm:text-lg">
-                        <CalendarIcon class="mr-2 h-4 w-4 text-primary sm:mr-3 sm:h-6 sm:w-6" />
-                        {{ venueName }}
-                    </h2>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+                        <h2 class="text-heading flex items-center text-base font-black text-slate-900 dark:text-[#EDEDEC] sm:text-lg">
+                            <CalendarIcon class="mr-2 h-4 w-4 text-primary sm:mr-3 sm:h-6 sm:w-6" />
+                            {{ venueName }}
+                        </h2>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                @click="showStatsModal = true"
+                                class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 transition-all dark:border-slate-800 dark:bg-[#1a1a1a] dark:text-slate-300 dark:hover:bg-[#2a2a2a]"
+                            >
+                                <Trophy class="h-3.5 w-3.5 text-amber-500" />
+                                <span>Leaderboard</span>
+                            </button>
+                            <div
+                                v-if="operationalHours"
+                                class="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300"
+                            >
+                                <Clock class="h-3.5 w-3.5 shrink-0" />
+                                <span>{{ operationalHours }}</span>
+                            </div>
+                            <div
+                                class="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
+                            >
+                                <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                                Approved
+                            </div>
+                            <div
+                                class="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+                            >
+                                <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+                                Pending
+                            </div>
+                            <div
+                                class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800/20 dark:text-slate-500"
+                            >
+                                <span class="h-2 w-2 rounded-full bg-slate-300 ring-1 ring-slate-400"></span>
+                                Cancelled
+                            </div>
+                            <div
+                                class="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 dark:border-red-800/40 dark:bg-red-900/20 dark:text-red-300"
+                            >
+                                <span class="h-2 w-2 rounded-full bg-red-500"></span>
+                                Rejected
+                            </div>
+                            <button
+                                @click="toggleTheme"
+                                class="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-[#1a1a1a] dark:text-slate-300 dark:hover:bg-[#2a2a2a]"
+                                :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+                            >
+                                <Sun v-if="isDark" class="h-4 w-4" />
+                                <Moon v-else class="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
                     <div class="flex items-center gap-2">
                         <!-- Operational Hours Button -->
                         <button

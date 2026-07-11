@@ -90,6 +90,7 @@ Route::middleware(['auth', 'verified', 'venue'])->group(function () {
         Route::get('scoring', [PickleballController::class, 'scoring'])->name('scoring');
         Route::post('scoring/reset', [PickleballController::class, 'resetSession'])->name('scoring.reset');
         Route::post('scoring/save', [PickleballController::class, 'saveSession'])->name('scoring.save');
+        Route::post('scoring/state', [PickleballController::class, 'storeScoringState'])->name('scoring.state.store');
         Route::post('scoring/invitations', [PickleballController::class, 'inviteBookingPlayers'])->name('scoring.invitations.store');
         Route::post('scoring/invitations/{booking}/respond', [PickleballController::class, 'respondToBookingInvitation'])->name('scoring.invitations.respond');
         Route::post('matches', [PickleballController::class, 'storeMatch'])->name('matches.store');

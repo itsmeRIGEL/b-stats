@@ -37,7 +37,17 @@ const props = defineProps<{
     currentUserId?: number | null;
     currentUserVenueCount?: number | null;
     settings?: { scoring_win_points: number; scoring_loss_penalty: number };
+    venues?: Array<{ id: number; name: string }>;
+    selectedVenueId?: string | number;
 }>();
+
+const onVenueChange = (e: Event) => {
+    const val = (e.target as HTMLSelectElement).value;
+    router.visit(`/all-time-stats?venue_id=${val}`, {
+        preserveState: false,
+        preserveScroll: true,
+    });
+};
 
 const displayPlayerName = (player: any) => player?.username || player?.name || 'Unknown';
 
@@ -75,8 +85,23 @@ const handleMonthDropdownClickOutside = (e: MouseEvent) => {
         showMonthDropdown.value = false;
     }
 };
-onMounted(() => document.addEventListener('click', handleMonthDropdownClickOutside));
-onUnmounted(() => document.removeEventListener('click', handleMonthDropdownClickOutside));
+
+const showVenueDropdown = ref(false);
+const venueDropdownRef = ref<HTMLElement | null>(null);
+const handleVenueDropdownClickOutside = (e: MouseEvent) => {
+    if (venueDropdownRef.value && !venueDropdownRef.value.contains(e.target as Node)) {
+        showVenueDropdown.value = false;
+    }
+};
+
+onMounted(() => {
+    document.addEventListener('click', handleMonthDropdownClickOutside);
+    document.addEventListener('click', handleVenueDropdownClickOutside);
+});
+onUnmounted(() => {
+    document.removeEventListener('click', handleMonthDropdownClickOutside);
+    document.removeEventListener('click', handleVenueDropdownClickOutside);
+});
 const showDateModal = ref(false);
 const selectedDateGroup = ref<any>(null);
 const modalCategory = ref<'all' | 'booking' | 'walkin' | 'reclub'>('all');
@@ -623,6 +648,62 @@ onUnmounted(() => {
                     <div class="mb-3 sm:mb-6">
                         <h1 class="text-xl font-black text-slate-900 dark:text-white sm:text-2xl">All-Time Stats</h1>
                         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Career records &amp; rankings</p>
+                        <div class="mt-4" ref="venueDropdownRef">
+                            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Select Venue</label>
+                            <div class="relative">
+                                <button
+                                    type="button"
+                                    @click.stop="showVenueDropdown = !showVenueDropdown"
+                                    class="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-transparent bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-900 transition-all hover:border-slate-200 dark:bg-[#1a1a1a] dark:text-white dark:hover:border-[#2a2a2a]"
+                                >
+                                    <span>
+                                        {{ props.selectedVenueId === 'overall' ? '🏆 Overall (All Venues)' : `📍 ${props.venueLabel || 'Selected Venue'}` }}
+                                    </span>
+                                    <ChevronDown
+                                        class="h-4 w-4 text-slate-400 transition-transform duration-200"
+                                        :class="showVenueDropdown ? 'rotate-180' : ''"
+                                    />
+                                </button>
+                                <div
+                                    v-if="showVenueDropdown"
+                                    class="absolute left-0 z-50 mt-2 w-full min-w-[200px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-xl dark:border-[#1a1a1a] dark:bg-[#0f0f0f]"
+                                >
+                                    <button
+                                        type="button"
+                                        @click.stop="
+                                            router.visit('/all-time-stats?venue_id=overall', { preserveState: false, preserveScroll: true });
+                                            showVenueDropdown = false;
+                                        "
+                                        class="w-full rounded-xl px-4 py-2.5 text-left text-xs font-bold transition-all"
+                                        :class="
+                                            props.selectedVenueId === 'overall'
+                                                ? 'bg-blue-50/50 text-blue-600 dark:bg-transparent dark:text-green-500'
+                                                : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#1a1a1a]'
+                                        "
+                                    >
+                                        🏆 Overall (All Venues)
+                                    </button>
+                                    <div class="my-1 border-t border-slate-100 dark:border-[#1a1a1a]"></div>
+                                    <button
+                                        v-for="venue in props.venues"
+                                        :key="venue.id"
+                                        type="button"
+                                        @click.stop="
+                                            router.visit(`/all-time-stats?venue_id=${venue.id}`, { preserveState: false, preserveScroll: true });
+                                            showVenueDropdown = false;
+                                        "
+                                        class="w-full rounded-xl px-4 py-2.5 text-left text-xs font-bold transition-all"
+                                        :class="
+                                            props.selectedVenueId == venue.id
+                                                ? 'bg-blue-50/50 text-blue-600 dark:bg-transparent dark:text-green-500'
+                                                : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#1a1a1a]'
+                                        "
+                                    >
+                                        📍 {{ venue.name }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
                         <button

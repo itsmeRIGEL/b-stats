@@ -28,6 +28,10 @@ import {
     X,
     Mail,
     Facebook,
+    Instagram,
+    Youtube,
+    Twitter,
+    Globe,
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { SharedData } from '@/types';
@@ -110,6 +114,77 @@ const venueName = computed(() => props.venue?.name?.trim() || 'Venue Calendar');
 const bookingStoreRoute = computed(() => (props.venue?.name ? route('book.venue.store', { venue: props.venue.name }) : route('book.store')));
 const venueAmenities = computed(() => (props.venue?.amenities ?? []).slice(0, 8));
 const venueGallery = computed(() => props.venue?.gallery_urls ?? []);
+
+const currentGalleryIndex = ref(0);
+const nextGalleryImage = () => {
+    if (!venueGallery.value.length) return;
+    currentGalleryIndex.value = (currentGalleryIndex.value + 1) % venueGallery.value.length;
+};
+const prevGalleryImage = () => {
+    if (!venueGallery.value.length) return;
+    currentGalleryIndex.value = (currentGalleryIndex.value - 1 + venueGallery.value.length) % venueGallery.value.length;
+};
+
+const isLightboxOpen = ref(false);
+const lightboxIndex = ref(0);
+const lightboxImages = ref<string[]>([]);
+const openLightbox = (index: number, customImages?: string[]) => {
+    lightboxImages.value = customImages || venueGallery.value;
+    lightboxIndex.value = index;
+    isLightboxOpen.value = true;
+};
+const closeLightbox = () => {
+    isLightboxOpen.value = false;
+};
+const nextLightboxImage = () => {
+    if (!lightboxImages.value.length) return;
+    lightboxIndex.value = (lightboxIndex.value + 1) % lightboxImages.value.length;
+};
+const prevLightboxImage = () => {
+    if (!lightboxImages.value.length) return;
+    lightboxIndex.value = (lightboxIndex.value - 1 + lightboxImages.value.length) % lightboxImages.value.length;
+};
+const getPlatformLabel = (platform: string) => {
+    switch (platform) {
+        case 'facebook': return 'Facebook Page';
+        case 'instagram': return 'Instagram Profile';
+        case 'youtube': return 'YouTube Channel';
+        case 'tiktok': return 'TikTok Account';
+        case 'twitter': return 'X / Twitter';
+        default: return 'Official Website';
+    }
+};
+
+const socialLinksList = computed(() => {
+    const rawVal = props.venue?.facebook_url;
+    if (!rawVal) return [];
+    
+    try {
+        const parsed = JSON.parse(rawVal);
+        if (Array.isArray(parsed)) {
+            return parsed.map((item: any) => ({
+                platform: item.platform || 'facebook',
+                url: item.url || '',
+                label: getPlatformLabel(item.platform)
+            })).filter((item) => item.url.trim().length > 0);
+        } else if (parsed && typeof parsed === 'object' && parsed.platform && parsed.url) {
+            return [{
+                platform: parsed.platform,
+                url: parsed.url,
+                label: getPlatformLabel(parsed.platform)
+            }];
+        }
+    } catch (e) {
+        // Fallback for legacy simple raw url strings
+        return [{
+            platform: 'facebook',
+            url: rawVal,
+            label: 'Facebook Page'
+        }];
+    }
+    return [];
+});
+
 
 /* ─── Calendar helpers ─── */
 const formatDateToISO = (date: Date) => {
@@ -353,10 +428,29 @@ const handleClickOutside = (e: MouseEvent) => {
 };
 
 /* ─── Theme (independent preference for booking page) ─── */
-const isDark = ref(localStorage.getItem('booking-theme') === 'dark');
+const isDark = ref(false);
+
+const syncThemeWithApp = () => {
+    const savedAppearance = localStorage.getItem('appearance');
+    const mainAppDark = savedAppearance === 'dark' || ((savedAppearance === 'system' || !savedAppearance) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (currentUser.value) {
+        isDark.value = mainAppDark;
+    } else {
+        isDark.value = localStorage.getItem('booking-theme') === 'dark';
+    }
+};
+
+syncThemeWithApp();
+
 const toggleTheme = () => {
     isDark.value = !isDark.value;
-    localStorage.setItem('booking-theme', isDark.value ? 'dark' : 'light');
+    const themeStr = isDark.value ? 'dark' : 'light';
+    localStorage.setItem('booking-theme', themeStr);
+    
+    if (currentUser.value) {
+        localStorage.setItem('appearance', themeStr);
+    }
+    
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
         metaThemeColor.setAttribute('content', isDark.value ? '#16a34a' : '#3b82f6');
@@ -397,8 +491,10 @@ const handleVisibilityChange = () => {
 };
 
 onMounted(() => {
+    syncThemeWithApp();
+    
     htmlHadDark = document.documentElement.classList.contains('dark');
-    if (htmlHadDark) {
+    if (document.documentElement.classList.contains('dark')) {
         document.documentElement.classList.remove('dark');
     }
 
@@ -411,13 +507,17 @@ onMounted(() => {
     if (document.visibilityState === 'visible') startPolling();
 });
 onUnmounted(() => {
-    if (htmlHadDark) {
+    const savedAppearance = localStorage.getItem('appearance');
+    const mainAppDark = savedAppearance === 'dark' || ((savedAppearance === 'system' || !savedAppearance) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    
+    if (mainAppDark) {
         document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
     }
+
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
-        const savedAppearance = localStorage.getItem('appearance');
-        const mainAppDark = savedAppearance === 'dark' || ((savedAppearance === 'system' || !savedAppearance) && window.matchMedia('(prefers-color-scheme: dark)').matches);
         metaThemeColor.setAttribute('content', mainAppDark ? '#16a34a' : '#3b82f6');
     }
 });
@@ -1111,23 +1211,46 @@ onUnmounted(() => {
         </div>
         <main class="relative z-10 mx-auto w-full max-w-7xl flex-1 px-4 py-4 sm:px-6 sm:py-6">
             <div class="mb-5 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#0f0f0f] sm:mb-6">
-                <div class="h-48 bg-slate-100 dark:bg-[#090909] sm:h-60">
-                    <img v-if="props.venue?.cover_photo_url" :src="props.venue.cover_photo_url" :alt="`${venueName} cover photo`" class="h-full w-full object-cover" />
+                <div class="h-48 bg-slate-100 dark:bg-[#090909] sm:h-60 relative">
+                    <img 
+                        v-if="props.venue?.cover_photo_url" 
+                        :src="props.venue.cover_photo_url" 
+                        :alt="`${venueName} cover photo`" 
+                        @click="openLightbox(0, [props.venue.cover_photo_url])"
+                        class="h-full w-full object-cover cursor-zoom-in hover:brightness-95 transition-all" 
+                    />
                     <div v-else class="flex h-full items-center justify-center bg-gradient-to-br from-slate-100 via-slate-200 to-slate-50 text-sm font-semibold text-slate-400 dark:from-[#111] dark:via-[#181818] dark:to-[#0b0b0b]">
                         Venue cover photo
+                    </div>
+                    
+                    <!-- Floating Theme Switcher at Top Left -->
+                    <div class="absolute left-4 top-4 z-10">
+                        <button
+                            type="button"
+                            @click="toggleTheme"
+                            class="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-white backdrop-blur-md transition-all hover:bg-black/50 hover:scale-105 active:scale-95 shadow-lg"
+                            :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+                        >
+                            <Sun v-if="isDark" class="h-5 w-5" />
+                            <Moon v-else class="h-5 w-5" />
+                        </button>
                     </div>
                 </div>
                 <div class="p-4 sm:p-5">
                     <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                         <div class="flex min-w-0 gap-4">
-                            <div class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 dark:border-[#1a1a1a] dark:bg-[#090909]">
+                            <div 
+                                class="flex h-36 w-36 shrink-0 items-center justify-center overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-100 dark:border-[#1a1a1a] dark:bg-[#090909]"
+                                :class="props.venue?.logo_url ? 'cursor-zoom-in hover:brightness-95 transition-all' : ''"
+                                @click="props.venue?.logo_url ? openLightbox(0, [props.venue.logo_url]) : null"
+                            >
                                 <img v-if="props.venue?.logo_url" :src="props.venue.logo_url" :alt="`${venueName} logo`" class="h-full w-full object-cover" />
                                 <span v-else class="text-sm font-black text-slate-400">{{ venueName.slice(0, 2).toUpperCase() }}</span>
                             </div>
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">{{ venueName }}</h2>
-                                    <span class="rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold text-white">Available</span>
+                                    <span class="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-sm">Available</span>
                                 </div>
                                 <p v-if="props.venue?.tagline" class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ props.venue.tagline }}</p>
                                 <p class="mt-3 flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
@@ -1141,12 +1264,23 @@ onUnmounted(() => {
                                     </p>
                                     <p v-if="props.venue?.contact_email" class="flex items-center gap-1.5">
                                         <Mail class="h-4 w-4 shrink-0 text-slate-400" />
-                                        <a :href="`mailto:${props.venue.contact_email}`" class="hover:text-emerald-500 transition-colors">{{ props.venue.contact_email }}</a>
+                                        <a :href="`mailto:${props.venue.contact_email}`" class="hover:text-primary transition-colors">{{ props.venue.contact_email }}</a>
                                     </p>
-                                    <p v-if="props.venue?.facebook_url" class="flex items-center gap-1.5">
-                                        <Facebook class="h-4 w-4 shrink-0 text-slate-400" />
-                                        <a :href="props.venue.facebook_url" target="_blank" rel="noopener noreferrer" class="hover:text-emerald-500 transition-colors">Facebook Page</a>
-                                    </p>
+                                    
+                                    <template v-if="socialLinksList.length">
+                                        <p
+                                            v-for="link in socialLinksList"
+                                            :key="link.platform + link.url"
+                                            class="flex items-center gap-1.5"
+                                        >
+                                            <Facebook v-if="link.platform === 'facebook'" class="h-4 w-4 shrink-0 text-slate-400" />
+                                            <Instagram v-else-if="link.platform === 'instagram'" class="h-4 w-4 shrink-0 text-slate-400" />
+                                            <Youtube v-else-if="link.platform === 'youtube'" class="h-4 w-4 shrink-0 text-slate-400" />
+                                            <Twitter v-else-if="link.platform === 'twitter'" class="h-4 w-4 shrink-0 text-slate-400" />
+                                            <Globe v-else class="h-4 w-4 shrink-0 text-slate-400" />
+                                            <a :href="link.url" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">{{ link.label }}</a>
+                                        </p>
+                                    </template>
                                 </div>
                                 <p class="mt-4 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                                     {{ props.venue?.description || 'Reserve your court, explore the schedule, and enjoy a smooth booking flow from this venue page.' }}
@@ -1169,8 +1303,8 @@ onUnmounted(() => {
                             <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">PHP {{ props.pricing.member_booking_rate }}/hr</p>
                         </div>
                         <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-[#0a0a0a]">
-                            <p class="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Contact</p>
-                            <p class="mt-1 text-sm font-bold text-slate-900 dark:text-white">{{ props.venue?.contact_phone || props.venue?.contact_email || 'Venue inbox soon' }}</p>
+                            <p class="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Non-member rate</p>
+                            <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">PHP {{ props.pricing.non_member_booking_rate }}/hr</p>
                         </div>
                     </div>
 
@@ -1178,19 +1312,69 @@ onUnmounted(() => {
                         <span
                             v-for="amenity in venueAmenities"
                             :key="amenity"
-                            class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                            class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary dark:bg-primary/15 dark:text-primary/90"
                         >
                             {{ amenity }}
                         </span>
                     </div>
 
-                    <div v-if="venueGallery.length" class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <div
-                            v-for="(image, index) in venueGallery.slice(0, 4)"
-                            :key="`${image}-${index}`"
-                            class="h-28 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-[#1a1a1a] dark:bg-[#090909]"
-                        >
-                            <img :src="image" :alt="`${venueName} photo ${index + 1}`" class="h-full w-full object-cover" />
+                    <div v-if="venueGallery.length" class="mt-5 relative group/gallery overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-[#1a1a1a] dark:bg-[#090909] h-60 sm:h-72 md:h-80 p-2 shadow-inner">
+                        <!-- Current Slides (2 side-by-side) -->
+                        <div class="h-full w-full grid gap-2.5" :class="venueGallery.length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
+                            <div class="flex h-full w-full items-center justify-center bg-slate-200/55 dark:bg-[#050505]/55 rounded-xl overflow-hidden p-1">
+                                <img 
+                                    :src="venueGallery[currentGalleryIndex]" 
+                                    :alt="`${venueName} photo ${currentGalleryIndex + 1}`" 
+                                    @click="openLightbox(currentGalleryIndex)"
+                                    class="max-h-full max-w-full object-contain rounded-lg transition-all duration-350 cursor-zoom-in hover:scale-[1.02]" 
+                                />
+                            </div>
+                            <div 
+                                v-if="venueGallery.length > 1"
+                                class="flex h-full w-full items-center justify-center bg-slate-200/55 dark:bg-[#050505]/55 rounded-xl overflow-hidden p-1"
+                            >
+                                <img 
+                                    :src="venueGallery[(currentGalleryIndex + 1) % venueGallery.length]" 
+                                    :alt="`${venueName} photo ${((currentGalleryIndex + 1) % venueGallery.length) + 1}`" 
+                                    @click="openLightbox((currentGalleryIndex + 1) % venueGallery.length)"
+                                    class="max-h-full max-w-full object-contain rounded-lg transition-all duration-350 cursor-zoom-in hover:scale-[1.02]" 
+                                />
+                            </div>
+                        </div>
+                        
+                        <!-- Navigation Arrows -->
+                        <div v-if="venueGallery.length > 1">
+                            <button
+                                type="button"
+                                @click="prevGalleryImage"
+                                class="absolute left-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 dark:bg-[#0f0f0f]/90 text-slate-800 dark:text-white shadow-md hover:bg-white dark:hover:bg-black transition-all opacity-0 group-hover/gallery:opacity-100 focus:opacity-100"
+                            >
+                                <ChevronLeft class="h-5 w-5" />
+                            </button>
+                            <button
+                                type="button"
+                                @click="nextGalleryImage"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 dark:bg-[#0f0f0f]/90 text-slate-800 dark:text-white shadow-md hover:bg-white dark:hover:bg-black transition-all opacity-0 group-hover/gallery:opacity-100 focus:opacity-100"
+                            >
+                                <ChevronRight class="h-5 w-5" />
+                            </button>
+                        </div>
+                        
+                        <!-- Counter Badge -->
+                        <div class="absolute bottom-3 right-3 rounded-full bg-black/60 px-2.5 py-0.5 text-[11px] font-bold text-white backdrop-blur-sm">
+                            {{ currentGalleryIndex + 1 }} / {{ venueGallery.length }}
+                        </div>
+                        
+                        <!-- Mini Dot Indicators -->
+                        <div v-if="venueGallery.length > 1" class="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 px-2.5 py-1 rounded-full bg-black/35 backdrop-blur-sm">
+                            <button
+                                v-for="(_, idx) in venueGallery"
+                                :key="idx"
+                                type="button"
+                                @click="currentGalleryIndex = idx"
+                                class="h-1.5 rounded-full transition-all duration-300"
+                                :class="currentGalleryIndex === idx ? 'bg-white w-3' : 'bg-white/50 w-1.5'"
+                            />
                         </div>
                     </div>
                 </div>
@@ -2419,6 +2603,61 @@ onUnmounted(() => {
                             </div>
                         </div>
                     </div>
+                </div>
+            </Transition>
+        </Teleport>
+
+        <!-- Photo Lightbox Modal -->
+        <Teleport to="body">
+            <Transition
+                enter-active-class="transition-opacity duration-300 ease-out"
+                enter-from-class="opacity-0"
+                enter-to-class="opacity-100"
+                leave-active-class="transition-opacity duration-200 ease-in"
+                leave-from-class="opacity-100"
+                leave-to-class="opacity-0"
+            >
+                <div v-if="isLightboxOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md">
+                    <!-- Close Button -->
+                    <button 
+                        type="button" 
+                        @click="closeLightbox" 
+                        class="absolute right-6 top-6 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 hover:scale-105 active:scale-95"
+                    >
+                        <X class="h-6 w-6" />
+                    </button>
+
+                    <!-- Prev Arrow -->
+                    <button 
+                        v-if="lightboxImages.length > 1"
+                        type="button" 
+                        @click="prevLightboxImage" 
+                        class="absolute left-6 top-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 hover:scale-105 active:scale-95 z-10"
+                    >
+                        <ChevronLeft class="h-8 w-8" />
+                    </button>
+
+                    <!-- Image Container -->
+                    <div class="flex flex-col items-center select-none max-h-[85vh] max-w-[90vw]">
+                        <img 
+                            :src="lightboxImages[lightboxIndex]" 
+                            alt="Venue photo large view" 
+                            class="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10" 
+                        />
+                        <span class="mt-4 text-sm font-bold text-white/70 tracking-wider">
+                            {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}
+                        </span>
+                    </div>
+
+                    <!-- Next Arrow -->
+                    <button 
+                        v-if="lightboxImages.length > 1"
+                        type="button" 
+                        @click="nextLightboxImage" 
+                        class="absolute right-6 top-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 hover:scale-105 active:scale-95 z-10"
+                    >
+                        <ChevronRight class="h-8 w-8" />
+                    </button>
                 </div>
             </Transition>
         </Teleport>

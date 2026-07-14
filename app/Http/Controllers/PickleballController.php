@@ -37,6 +37,36 @@ class PickleballController extends Controller
         if (!$user || $user->role === 'admin') {
             return null;
         }
+        if ($user->venue_id) {
+            return $user->venue_id;
+        }
+        if ($user->role === 'player') {
+            $player = Player::where('user_id', $user->id)->first();
+            if ($player) {
+                if ($player->venue_id) {
+                    return $player->venue_id;
+                }
+                $now = now();
+                $activeBooking = Booking::where('status', 'approved')
+                    ->where('booking_date', $now->toDateString())
+                    ->where('start_time', '<=', $now->toTimeString())
+                    ->where('end_time', '>', $now->toTimeString())
+                    ->where(function ($query) use ($user, $player) {
+                        $query->whereHas('players', fn($q) => $q->where('players.id', $player->id)->where('booking_player.status', 'accepted'))
+                            ->orWhere('user_id', $user->id)
+                            ->orWhereJsonContains('scoring_state->localRegisteredPlayerIds', $player->id)
+                            ->orWhereJsonContains('scoring_state->activePlayerIds', $player->id)
+                            ->orWhereRaw('LOWER(lead_name) = ?', [strtolower($user->username ?? '')])
+                            ->orWhereRaw('LOWER(lead_name) = ?', [strtolower($user->name ?? '')])
+                            ->orWhereRaw('LOWER(lead_name) = ?', [strtolower($player->name ?? '')]);
+                    })
+                    ->first();
+                if ($activeBooking) {
+                    return $activeBooking->venue_id;
+                }
+            }
+            return null;
+        }
         $schedulerId = $user->role === 'scorer' ? $user->scheduler_id : $user->id;
         if (!$schedulerId) {
             return null;
@@ -582,7 +612,7 @@ class PickleballController extends Controller
             $bookingsQuery->where('venue_id', $venueId);
         }
 
-        $playersQuery = Player::query();
+        $playersQuery = Player::with('user');
         if ($venueId) {
             $playersQuery->where('venue_id', $venueId);
         }
@@ -1412,15 +1442,28 @@ class PickleballController extends Controller
         return redirect()->back();
     }
 
-    private function getAllTimeStatsData()
+    private function getAllTimeStatsData($venueId = null)
     {
         $settings = $this->venueSettings();
-        $venueId = $this->activeVenueId();
         $winPoints = max(1, (int) ($settings['scoring_win_points'] ?? 10));
 
         $allPlayersQuery = Player::with('user');
         if ($venueId) {
-            $allPlayersQuery->where('venue_id', $venueId);
+            $allPlayersQuery->where(function ($q) use ($venueId) {
+                $q->where('venue_id', $venueId)
+                  ->orWhereExists(function ($subQuery) use ($venueId) {
+                      $subQuery->select(\DB::raw(1))
+                          ->from('game_matches')
+                          ->where('venue_id', $venueId)
+                          ->where('is_tallied', true)
+                          ->where(function ($matchQ) {
+                              $matchQ->whereColumn('game_matches.player_1_id', 'players.id')
+                                     ->orWhereColumn('game_matches.player_2_id', 'players.id')
+                                     ->orWhereColumn('game_matches.player_3_id', 'players.id')
+                                     ->orWhereColumn('game_matches.player_4_id', 'players.id');
+                          });
+                  });
+            });
         }
         $allPlayers = $allPlayersQuery->get();
 
@@ -1549,14 +1592,30 @@ class PickleballController extends Controller
             'players' => $players,
             'matches' => $matchHistory,
         ];
-    }
-
-    public function allTimeStats()
+    }    public function allTimeStats(Request $request)
     {
         $settings = $this->venueSettings();
         $winPoints = max(1, (int) ($settings['scoring_win_points'] ?? 10));
-        $statsData = $this->getAllTimeStatsData();
-        $venueLabel = $this->activeVenue()?->name;
+        
+        $defaultVenueId = $this->activeVenueId();
+        $selectedVenueId = $request->input('venue_id');
+        if ($selectedVenueId === null) {
+            $selectedVenueId = $defaultVenueId ? (string) $defaultVenueId : 'overall';
+        }
+
+        $venueIdForQuery = ($selectedVenueId === 'overall') ? null : (int) $selectedVenueId;
+        $statsData = $this->getAllTimeStatsData($venueIdForQuery);
+
+        $venues = Venue::where('is_active', true)->get()->map(fn($v) => [
+            'id' => $v->id,
+            'name' => $v->name,
+        ]);
+
+        $venueLabel = null;
+        if ($selectedVenueId !== 'overall') {
+            $venueRecord = Venue::find($selectedVenueId);
+            $venueLabel = $venueRecord ? $venueRecord->name : null;
+        }
 
         return Inertia::render('AllTimeStats', [
             'players' => $statsData['players'],
@@ -1566,6 +1625,8 @@ class PickleballController extends Controller
                 'scoring_loss_penalty' => max(1, (int) ($settings['scoring_loss_penalty'] ?? 5)),
             ],
             'venueLabel' => $venueLabel,
+            'venues' => $venues,
+            'selectedVenueId' => $selectedVenueId,
         ]);
     }
 
@@ -1614,6 +1675,12 @@ class PickleballController extends Controller
 
         $settings = $this->venueSettings();
         $venueId = $this->activeVenueId();
+        if ($request->input('booking_id')) {
+            $booking = Booking::find($request->input('booking_id'));
+            if ($booking) {
+                $venueId = $booking->venue_id;
+            }
+        }
         $feeType = $request->boolean('is_walkin') ? ($validated['walkin_fee_type'] ?? 'with_ball') : null;
 
         $fee = 0.00;
@@ -1902,6 +1969,39 @@ class PickleballController extends Controller
         }
         $sessionQuery->update(['show_in_roster' => true, 'in_session' => false]);
 
+        $user = auth()->user();
+        if ($user && $user->isPlayer()) {
+            $activeBooking = Booking::where('status', 'approved')
+                ->where('booking_date', now()->toDateString())
+                ->where('user_id', $user->id)
+                ->latest('start_time')
+                ->first();
+
+            if (!$activeBooking) {
+                $playerProfile = Player::where('user_id', $user->id)->first();
+                if ($playerProfile) {
+                    $activeBooking = Booking::where('status', 'approved')
+                        ->where('booking_date', now()->toDateString())
+                        ->whereHas('players', fn($q) => $q->where('players.id', $playerProfile->id))
+                        ->latest('start_time')
+                        ->first();
+                }
+            }
+
+            if ($activeBooking) {
+                $activeBooking->update(['scoring_state' => null]);
+                if ($activeBooking->user_id) {
+                    $ownerPlayer = Player::where('user_id', $activeBooking->user_id)->first();
+                    $ownerPlayerId = $ownerPlayer ? $ownerPlayer->id : null;
+                    if ($ownerPlayerId) {
+                        $activeBooking->players()->where('players.id', '!=', $ownerPlayerId)->detach();
+                    } else {
+                        $activeBooking->players()->detach();
+                    }
+                }
+            }
+        }
+
         return redirect()->back()->with('success', 'Session saved and board cleared.');
     }
 
@@ -1992,13 +2092,13 @@ class PickleballController extends Controller
             'description' => 'nullable|string|max:1000',
             'contact_email' => 'nullable|email|max:255',
             'contact_phone' => 'nullable|string|max:50',
-            'facebook_url' => 'nullable|url|max:255',
+            'facebook_url' => 'nullable|string|max:1000',
             'amenities' => 'nullable|string|max:500',
             'covered_court_count' => 'nullable|integer|min:0',
-            'logo_photo' => 'nullable|image|max:2048',
-            'cover_photo' => 'nullable|image|max:4096',
+            'logo_photo' => 'nullable|image|max:10240',
+            'cover_photo' => 'nullable|image|max:10240',
             'gallery_photos' => 'nullable|array',
-            'gallery_photos.*' => 'image|max:2048',
+            'gallery_photos.*' => 'image|max:10240',
             'existing_gallery_paths' => 'nullable|string',
         ]);
 
@@ -2073,6 +2173,9 @@ class PickleballController extends Controller
 
         // Merge venue-level payment reference into settings
         $venue = $venueName ? Venue::where('name', $venueName)->first() : null;
+        if (!$venue) {
+            $venue = Venue::where('is_active', true)->first();
+        }
         if ($venue) {
             if ($venue->payment_account_name) {
                 $settings['payment_account_name'] = $venue->payment_account_name;

@@ -177,11 +177,7 @@ const bookingStatusClass = (status: string) => {
                             </div>
 
                             <div class="absolute inset-x-0 top-0 flex items-start justify-between p-4">
-                                <span class="rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold text-white shadow-md">Available</span>
-                                <span class="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-md dark:bg-green-600">
-                                    <ShieldCheck class="h-3.5 w-3.5" />
-                                    Venue
-                                </span>
+                                <span class="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-md">Available</span>
                             </div>
                         </div>
 
@@ -206,16 +202,6 @@ const bookingStatusClass = (status: string) => {
                                 {{ venue.description || 'This venue is ready for bookings. Open the booking page to see the live schedule and choose your court.' }}
                             </p>
 
-                            <!-- Gallery strip -->
-                            <div v-if="venue.gallery_urls && venue.gallery_urls.length" class="mt-4 grid grid-cols-4 gap-2">
-                                <div
-                                    v-for="(img, idx) in venue.gallery_urls.slice(0, 4)"
-                                    :key="idx"
-                                    class="h-20 overflow-hidden rounded-xl border border-slate-100 bg-slate-100 dark:border-[#1a1a1a] dark:bg-[#090909]"
-                                >
-                                    <img :src="img" :alt="`${venue.name} gallery ${idx + 1}`" class="h-full w-full object-cover" />
-                                </div>
-                            </div>
 
                             <div class="mt-5 grid gap-3 sm:grid-cols-3">
                                 <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-[#0a0a0a]">
@@ -236,7 +222,7 @@ const bookingStatusClass = (status: string) => {
                                 <span
                                     v-for="amenity in (venue.amenities || []).slice(0, 5)"
                                     :key="`${venue.id}-${amenity}`"
-                                    class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                    class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary dark:bg-primary/15 dark:text-primary/90"
                                 >
                                     {{ amenity }}
                                 </span>

@@ -687,7 +687,10 @@ const updatePassword = () => {
                                     </div>
 
                                     <div class="space-y-2">
-                                        <Label for="username">Username</Label>
+                                        <Label for="username">
+                                            Username
+                                            <span v-if="isPlayer" class="text-red-500">*</span>
+                                        </Label>
                                         <Input id="username" v-model="form.username" autocomplete="username" placeholder="username" :disabled="!isEditing" />
                                         <InputError :message="form.errors.username" />
                                     </div>

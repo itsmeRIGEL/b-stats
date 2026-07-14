@@ -59,6 +59,50 @@ const form = useForm({
     existing_gallery_paths: '' as string,
 });
 
+const socialLinks = ref<{ platform: string; url: string }[]>([]);
+
+const addSocialLink = () => {
+    socialLinks.value.push({ platform: 'facebook', url: '' });
+};
+
+const removeSocialLink = (index: number) => {
+    socialLinks.value.splice(index, 1);
+};
+
+const parseSocialUrls = () => {
+    const rawVal = props.venue?.facebook_url;
+    if (!rawVal) return;
+    try {
+        const parsed = JSON.parse(rawVal);
+        if (Array.isArray(parsed)) {
+            socialLinks.value = parsed.map((item: any) => ({
+                platform: item.platform || 'facebook',
+                url: item.url || ''
+            }));
+            return;
+        } else if (parsed && typeof parsed === 'object' && parsed.platform && parsed.url) {
+            socialLinks.value = [{ platform: parsed.platform, url: parsed.url }];
+            return;
+        }
+    } catch (e) {
+        socialLinks.value = [{ platform: 'facebook', url: rawVal }];
+    }
+};
+
+parseSocialUrls();
+
+const getPlaceholder = (platform: string) => {
+    switch (platform) {
+        case 'facebook': return 'https://facebook.com/yourvenue';
+        case 'instagram': return 'https://instagram.com/yourvenue';
+        case 'youtube': return 'https://youtube.com/c/yourvenue';
+        case 'tiktok': return 'https://tiktok.com/@yourvenue';
+        case 'twitter': return 'https://x.com/yourvenue';
+        default: return 'https://yourwebsite.com';
+    }
+};
+
+
 const title = computed(() => (props.venue ? 'Venue Setup' : 'Create your venue profile'));
 const heroTitle = computed(() => form.name || 'Your venue preview');
 const amenitiesPreview = computed(() =>
@@ -131,6 +175,18 @@ const removePhoto = (index: number) => {
 };
 
 const submit = () => {
+    const filteredLinks = socialLinks.value.filter((link) => link.url.trim().length > 0);
+    if (filteredLinks.length > 0) {
+        form.facebook_url = JSON.stringify(
+            filteredLinks.map((link) => ({
+                platform: link.platform,
+                url: link.url.trim()
+            }))
+        );
+    } else {
+        form.facebook_url = '';
+    }
+
     form.gallery_photos = galleryItems.value
         .filter((item) => item.type === 'new')
         .map((item) => item.file as File);
@@ -261,15 +317,59 @@ const submit = () => {
                                 />
                             </div>
 
-                            <div class="grid gap-2 lg:col-span-2">
-                                <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="facebook_url">Facebook page</label>
-                                <input
-                                    id="facebook_url"
-                                    v-model="form.facebook_url"
-                                    type="url"
-                                    class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 dark:border-[#1a1a1a] dark:bg-[#090909] dark:text-white"
-                                    placeholder="https://facebook.com/yourvenue"
-                                />
+                            <div class="grid gap-3 lg:col-span-2">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm font-bold text-slate-700 dark:text-slate-300">Social Media Links</label>
+                                    <button 
+                                        type="button" 
+                                        @click="addSocialLink"
+                                        class="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 dark:text-green-400 dark:hover:text-green-300"
+                                    >
+                                        <Plus class="h-3 w-3" /> Add link
+                                    </button>
+                                </div>
+                                
+                                <div class="grid gap-3">
+                                    <div 
+                                        v-for="(item, index) in socialLinks" 
+                                        :key="index"
+                                        class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2.5 bg-slate-50 border border-slate-200 p-4 rounded-3xl dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+                                    >
+                                        <div class="grid gap-1 flex-1 sm:max-w-[180px]">
+                                            <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Platform</label>
+                                            <select
+                                                v-model="item.platform"
+                                                class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 dark:border-[#1a1a1a] dark:bg-[#090909] dark:text-white w-full"
+                                            >
+                                                <option value="facebook">Facebook</option>
+                                                <option value="instagram">Instagram</option>
+                                                <option value="youtube">YouTube</option>
+                                                <option value="tiktok">TikTok</option>
+                                                <option value="twitter">X (Twitter)</option>
+                                                <option value="website">Website</option>
+                                            </select>
+                                        </div>
+                                        <div class="grid gap-1 flex-1">
+                                            <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Link / URL</label>
+                                            <input
+                                                v-model="item.url"
+                                                type="url"
+                                                class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 dark:border-[#1a1a1a] dark:bg-[#090909] dark:text-white"
+                                                :placeholder="getPlaceholder(item.platform)"
+                                            />
+                                        </div>
+                                        <div class="sm:pt-5 shrink-0 flex items-center justify-end">
+                                            <button 
+                                                type="button"
+                                                @click="removeSocialLink(index)"
+                                                class="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition dark:bg-rose-950/20 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                                            >
+                                                <X class="h-5 w-5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p v-if="!socialLinks.length" class="text-xs text-slate-500 dark:text-slate-400 italic">No social media links added yet. Click "Add link" above.</p>
+                                </div>
                             </div>
 
                             <div class="grid gap-2 lg:col-span-2">
@@ -296,6 +396,7 @@ const submit = () => {
                                     <span v-else class="text-xs font-semibold text-slate-400">Upload your venue logo</span>
                                 </div>
                                 <input type="file" accept="image/*" class="hidden" @change="(event) => updateSinglePreview(event, 'logo')" />
+                                <p v-if="form.errors.logo_photo" class="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">{{ form.errors.logo_photo }}</p>
                             </label>
 
                             <label class="group grid gap-3 rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5 transition hover:border-blue-400 hover:bg-blue-50/40 dark:border-[#262626] dark:bg-[#0a0a0a] dark:hover:border-green-500 dark:hover:bg-green-950/10">
@@ -308,6 +409,7 @@ const submit = () => {
                                     <span v-else class="text-xs font-semibold text-slate-400">Upload the main venue banner</span>
                                 </div>
                                 <input type="file" accept="image/*" class="hidden" @change="(event) => updateSinglePreview(event, 'cover')" />
+                                <p v-if="form.errors.cover_photo" class="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">{{ form.errors.cover_photo }}</p>
                             </label>
                         </div>
 
@@ -344,6 +446,14 @@ const submit = () => {
                                 </label>
                             </div>
                             <p class="text-xs text-slate-500 dark:text-slate-400">Click a photo to remove it. Click <strong>Add photo</strong> to upload more.</p>
+                            <p v-if="form.errors.gallery_photos" class="mt-2 text-xs font-semibold text-rose-600 dark:text-rose-400">{{ form.errors.gallery_photos }}</p>
+                            <div
+                                v-for="(error, index) in Object.keys(form.errors).filter(key => key.startsWith('gallery_photos.'))"
+                                :key="error"
+                                class="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400"
+                            >
+                                {{ form.errors[error] }}
+                            </div>
                         </div>
 
                         <div class="flex items-center justify-between gap-3 border-t border-slate-200 pt-5 dark:border-[#1a1a1a]">
@@ -353,7 +463,7 @@ const submit = () => {
                             <button
                                 type="submit"
                                 :disabled="form.processing"
-                                class="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-green-600 dark:text-white dark:hover:bg-green-500"
+                                class="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground hover:bg-primary/95 transition-all hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 shadow-md shadow-primary/10"
                             >
                                 <Save class="h-4 w-4" />
                                 Save venue display
@@ -378,7 +488,7 @@ const submit = () => {
                                 <div class="min-w-0 flex-1">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <h2 class="text-2xl font-black text-slate-900 dark:text-white">{{ heroTitle }}</h2>
-                                        <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Available</span>
+                                        <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary dark:bg-primary/15 dark:text-primary/90">Available</span>
                                     </div>
                                     <p v-if="form.tagline" class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ form.tagline }}</p>
                                     <p class="mt-2 flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
@@ -425,7 +535,7 @@ const submit = () => {
                                 <span
                                     v-for="amenity in amenitiesPreview"
                                     :key="amenity"
-                                    class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                    class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary dark:bg-primary/15 dark:text-primary/90"
                                 >
                                     {{ amenity }}
                                 </span>

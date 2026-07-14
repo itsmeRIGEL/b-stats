@@ -42,6 +42,31 @@ const props = defineProps<{
 const displayPlayerName = (player: any) => player?.user?.username || player?.name || 'Player';
 const displayUsername = (player: any) => player?.username || player?.name || 'Not provided';
 const hasLinkedAccount = (player: any) => Boolean(player?.user_id);
+const formatGender = (gender?: string) => {
+    if (!gender) return 'Not provided';
+    return gender.charAt(0).toUpperCase() + gender.slice(1).toLowerCase();
+};
+const isFieldVisible = (player: any, fieldName: string) => {
+    if (!player?.user) return true;
+    const visibleFields = player.user.all_time_stats_visible_fields;
+    const defaultFields = ['first_name', 'middle_name', 'last_name', 'suffix', 'gender', 'username', 'birthday', 'address'];
+    const fieldsList = (Array.isArray(visibleFields) && visibleFields.length > 0) ? visibleFields : defaultFields;
+    return fieldsList.includes(fieldName);
+};
+const getPlayerNamePart = (player: any, part: 'first' | 'middle' | 'last' | 'suffix') => {
+    if (player?.user) {
+        if (part === 'first') return player.user.first_name;
+        if (part === 'middle') return player.user.middle_name;
+        if (part === 'last') return player.user.last_name;
+        if (part === 'suffix') return player.user.suffix;
+    }
+    if (!player?.full_name) return '';
+    const parts = player.full_name.trim().split(/\s+/);
+    if (parts.length === 0) return '';
+    if (part === 'first') return parts[0];
+    if (part === 'last') return parts.slice(1).join(' ');
+    return '';
+};
 
 const playerForm = useForm({
     name: '',
@@ -694,11 +719,11 @@ onUnmounted(() => {
                                 <div
                                     class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 text-2xl font-black text-white shadow-lg dark:from-green-500 dark:to-green-600"
                                 >
-                                    {{ displayPlayerName(selectedPlayer).charAt(0).toUpperCase() }}
+                                    {{ (isFieldVisible(selectedPlayer, 'username') ? displayPlayerName(selectedPlayer) : 'Hidden').charAt(0).toUpperCase() }}
                                 </div>
                                 <div class="min-w-0">
                                     <p class="truncate text-xl font-black text-slate-900 dark:text-white">
-                                        {{ displayPlayerName(selectedPlayer) }}
+                                        {{ isFieldVisible(selectedPlayer, 'username') ? displayPlayerName(selectedPlayer) : 'Hidden by player' }}
                                     </p>
                                     <span
                                         class="mt-1 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider"
@@ -729,15 +754,58 @@ onUnmounted(() => {
                             <!-- View Mode -->
                             <div v-if="!isEditing" class="min-h-0 flex-1 space-y-4 overflow-y-auto">
                                 <div
+                                    v-if="isFieldVisible(selectedPlayer, 'first_name')"
                                     class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
                                 >
                                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-green-900/20">
                                         <User class="h-4 w-4 text-violet-500 dark:text-green-400" />
                                     </div>
                                     <div>
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Full Name</p>
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">First Name</p>
                                         <p class="text-sm font-bold text-slate-900 dark:text-white">
-                                            {{ selectedPlayer.full_name || displayPlayerName(selectedPlayer) || 'Not provided' }}
+                                            {{ getPlayerNamePart(selectedPlayer, 'first') || 'Not provided' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div
+                                    v-if="isFieldVisible(selectedPlayer, 'middle_name')"
+                                    class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+                                >
+                                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-green-900/20">
+                                        <User class="h-4 w-4 text-violet-500 dark:text-green-400" />
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Middle Name</p>
+                                        <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                            {{ getPlayerNamePart(selectedPlayer, 'middle') || 'Not provided' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div
+                                    v-if="isFieldVisible(selectedPlayer, 'last_name')"
+                                    class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+                                >
+                                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-green-900/20">
+                                        <User class="h-4 w-4 text-violet-500 dark:text-green-400" />
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Last Name</p>
+                                        <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                            {{ getPlayerNamePart(selectedPlayer, 'last') || 'Not provided' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div
+                                    v-if="isFieldVisible(selectedPlayer, 'suffix')"
+                                    class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+                                >
+                                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-green-900/20">
+                                        <User class="h-4 w-4 text-violet-500 dark:text-green-400" />
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Suffix</p>
+                                        <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                            {{ getPlayerNamePart(selectedPlayer, 'suffix') || 'Not provided' }}
                                         </p>
                                     </div>
                                 </div>
@@ -749,7 +817,7 @@ onUnmounted(() => {
                                     </div>
                                     <div>
                                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Email</p>
-                                        <p class="text-sm font-bold text-slate-900 dark:text-white">{{ selectedPlayer.email || 'Not provided' }}</p>
+                                        <p class="text-sm font-bold text-slate-900 dark:text-white">{{ selectedPlayer.email || selectedPlayer.user?.email || 'Not provided' }}</p>
                                     </div>
                                 </div>
                                 <div
@@ -765,6 +833,7 @@ onUnmounted(() => {
                                 </div>
 
                                 <div
+                                    v-if="isFieldVisible(selectedPlayer, 'birthday')"
                                     class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
                                 >
                                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-900/20">
@@ -787,6 +856,7 @@ onUnmounted(() => {
                                 </div>
 
                                 <div
+                                    v-if="isFieldVisible(selectedPlayer, 'address')"
                                     class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
                                 >
                                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
@@ -794,10 +864,13 @@ onUnmounted(() => {
                                     </div>
                                     <div>
                                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</p>
-                                        <p class="text-sm font-bold text-slate-900 dark:text-white">{{ selectedPlayer.address || 'Not provided' }}</p>
+                                        <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                            {{ selectedPlayer.address || 'Not provided' }}
+                                        </p>
                                     </div>
                                 </div>
                                 <div
+                                    v-if="isFieldVisible(selectedPlayer, 'gender')"
                                     class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
                                 >
                                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-900/20">
@@ -805,7 +878,9 @@ onUnmounted(() => {
                                     </div>
                                     <div>
                                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Gender</p>
-                                        <p class="text-sm font-bold text-slate-900 dark:text-white">{{ selectedPlayer.gender || 'Not provided' }}</p>
+                                        <p class="text-sm font-bold text-slate-900 dark:text-white">
+                                            {{ formatGender(selectedPlayer.gender || selectedPlayer.user?.gender) }}
+                                        </p>
                                     </div>
                                 </div>
 

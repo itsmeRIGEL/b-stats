@@ -278,7 +278,7 @@ const derivedTemporaryMatchPlayers = computed<SessionPlayer[]>(() => {
 
 const sessionPlayers = computed<SessionPlayer[]>(() => {
     const merged = [
-        ...props.players,
+        ...(isPlayerScoringMode.value ? [] : props.players),
         ...derivedBookingRosterPlayers.value,
         ...localRegisteredSessionPlayers.value,
         ...derivedTemporaryMatchPlayers.value,
@@ -1645,7 +1645,7 @@ const hydrateQueueState = (sharedState?: SharedScoringState | null) => {
         }
 
         if (Array.isArray(parsed.localRegisteredPlayerIds)) {
-            const existingIds = new Set(props.players.map((player: SessionPlayer) => player.id));
+            const existingIds = isPlayerScoringMode.value ? new Set<number>() : new Set(props.players.map((player: SessionPlayer) => player.id));
             localRegisteredSessionPlayers.value = props.allPlayers
                 .filter((player: any) => parsed.localRegisteredPlayerIds?.includes(Number(player.id)) && !existingIds.has(Number(player.id)))
                 .map(mapRegisteredPlayerToSessionPlayer);
@@ -2014,10 +2014,8 @@ const submitScore = () => {
             onSuccess: () => {
                 showScoringModal.value = false;
                 scoringMatchDetails.value = null;
-                currentMatch.value = null;
-                matchStarted.value = false;
-                saveQueueState();
-                router.reload({ only: ['matches', 'players'] });
+                advanceToNextMatch();
+                router.reload({ only: ['matches', 'players', 'bookingRoster', 'scoringState'] });
             },
         });
     }
@@ -2119,6 +2117,9 @@ const getPlayerTotalFee = (player: any) => {
 
 onMounted(() => {
     hydrateQueueState();
+    if (isPlayerScoringViewOnly.value) {
+        router.reload({ only: POLL_RELOAD });
+    }
 });
 
 watch(
@@ -2134,7 +2135,13 @@ watch(
 watch(isQueueLocked, (locked) => {
     if (locked && canSaveSession.value && canEditScoringBoard.value) {
         localMatches.value = [];
-        activePlayerIds.value = new Set();
+        if (isPlayerScoringMode.value) {
+            const owner = props.allPlayers.find(p => p.user_id && props.playerBooking?.user_id && Number(p.user_id) === Number(props.playerBooking.user_id));
+            const ownerId = owner ? owner.id : null;
+            activePlayerIds.value = ownerId ? new Set([ownerId]) : new Set();
+        } else {
+            activePlayerIds.value = new Set();
+        }
         localRegisteredSessionPlayers.value = [];
         tempSessionPlayers.value = [];
         queuedMatches.value = [];
@@ -2326,7 +2333,7 @@ onUnmounted(() => {
                                     <p class="text-center text-[10px] text-slate-400 dark:text-slate-600">Add players &amp; press Random Queue</p>
                                 </div>
                                 <button
-                                    v-if="!isPlayerScoringViewOnly && (queuedMatches.length > 0 || activePlayerIds.size >= 2)"
+                                    v-if="queuedMatches.length > 0 || activePlayerIds.size >= 2"
                                     type="button"
                                     @click="handleStartMatchClick"
                                     :disabled="isQueueLocked || isPlayerScoringViewOnly || matchStarted"
@@ -2377,9 +2384,10 @@ onUnmounted(() => {
 
                     <!-- NEXT GAME CONTAINER (always visible) -->
                     <div
-                        v-if="currentMatch"
-                        @click.self="openQueueModal"
-                        class="mx-2 mb-2 shrink-0 cursor-pointer rounded-lg border border-slate-300/60 bg-white/45 p-1.5 transition-colors hover:border-indigo-400 dark:border-[#2a2a2a]/70 dark:bg-[#0a0a0a]/40 dark:hover:border-green-500"
+                        v-if="currentMatch || nextMatchPreview"
+                        @click.self="isPlayerScoringViewOnly ? null : openQueueModal"
+                        class="mx-2 mb-2 shrink-0 rounded-lg border border-slate-300/60 bg-white/45 p-1.5 transition-colors dark:border-[#2a2a2a]/70 dark:bg-[#0a0a0a]/40"
+                        :class="isPlayerScoringViewOnly ? '' : 'cursor-pointer hover:border-indigo-400 dark:hover:border-green-500'"
                     >
                         <div class="pointer-events-none mb-1 flex items-center justify-center gap-1.5">
                             <p class="text-center text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Next Game</p>
@@ -2389,7 +2397,7 @@ onUnmounted(() => {
                                 >+{{ queuedMatches.length }} queued</span
                             >
                         </div>
-                        <div v-if="nextMatchPreview" @click.self="openQueueModal" class="grid grid-cols-2 gap-1.5 sm:gap-1">
+                        <div v-if="nextMatchPreview" @click.self="isPlayerScoringViewOnly ? null : openQueueModal" class="grid grid-cols-2 gap-1.5 sm:gap-1">
                             <button
                                 type="button"
                                 class="next-game-pill truncate transition-colors"
@@ -2435,17 +2443,16 @@ onUnmounted(() => {
                     <div class="shrink-0 border-t border-slate-200 bg-white/80 p-4 dark:border-[#1a1a1a] dark:bg-[#0f0f0f]/80">
                         <div class="mx-auto w-full max-w-[280px] flex gap-2">
                             <button
-                                v-if="!isPlayerScoringViewOnly"
                                 @click="openScoringModal"
-                                :disabled="!currentMatch"
-                                class="h-10 flex-1 whitespace-nowrap rounded-xl bg-blue-600 text-[11px] font-black uppercase tracking-widest text-white shadow-sm shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-green-600 dark:shadow-green-500/20 dark:hover:bg-green-500"
+                                :disabled="!currentMatch || isPlayerScoringViewOnly"
+                                class="h-10 flex-1 whitespace-nowrap rounded-xl text-[11px] font-black uppercase tracking-widest text-white shadow-sm transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                                :class="(!currentMatch || isPlayerScoringViewOnly) ? 'bg-blue-600/50 dark:bg-green-600/50' : 'bg-blue-600 shadow-blue-500/20 hover:bg-blue-700 dark:bg-green-600 dark:shadow-green-500/20 dark:hover:bg-green-500'"
                             >
                                 Enter Score
                             </button>
                             <button
-                                v-if="!isPlayerScoringViewOnly"
                                 @click="resetQueue"
-                                :disabled="isQueueLocked || !currentMatch"
+                                :disabled="isQueueLocked || !currentMatch || isPlayerScoringViewOnly"
                                 class="h-10 flex-1 whitespace-nowrap rounded-xl border border-slate-200 bg-white text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-[#0a0a0a] dark:text-slate-300 dark:hover:bg-[#151515]"
                             >
                                 Reset Queue
@@ -3048,10 +3055,10 @@ onUnmounted(() => {
                         <button
                             v-if="!isPlayerScoringViewOnly"
                             @click="saveSession"
-                            :disabled="!canSaveSession"
+                            :disabled="!canSaveSession || (isPlayerScoringMode && !isTimeAlmostExpired && !isTimeFullyExpired)"
                             class="h-10 flex-1 whitespace-nowrap rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
                             :class="
-                                canSaveSession
+                                (canSaveSession && (!isPlayerScoringMode || isTimeAlmostExpired || isTimeFullyExpired))
                                     ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20 hover:bg-blue-700 active:scale-95 dark:bg-green-600 dark:shadow-green-500/20 dark:hover:bg-green-500'
                                     : 'cursor-not-allowed bg-emerald-200 text-emerald-400 opacity-60 dark:bg-emerald-900/30 dark:text-emerald-700'
                             "

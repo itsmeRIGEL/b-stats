@@ -44,6 +44,8 @@ class VenueSetupDisplayTest extends TestCase
             'is_active' => true,
         ]);
 
+        \Illuminate\Support\Facades\Storage::fake('public');
+
         $this->actingAs($scheduler)
             ->post(route('venue-setup.store'), [
                 'name' => 'Puerto Pickle Bay',
@@ -55,6 +57,13 @@ class VenueSetupDisplayTest extends TestCase
                 'facebook_url' => 'https://facebook.com/puertopicklebay',
                 'amenities' => 'Parking, Restrooms, Waiting Area',
                 'covered_court_count' => 2,
+                'logo_photo' => \Illuminate\Http\UploadedFile::fake()->image('logo.png'),
+                'cover_photo' => \Illuminate\Http\UploadedFile::fake()->image('cover.png'),
+                'gallery_photos' => [
+                    \Illuminate\Http\UploadedFile::fake()->image('gallery1.png'),
+                    \Illuminate\Http\UploadedFile::fake()->image('gallery2.png'),
+                ],
+                'existing_gallery_paths' => json_encode(['/storage/venue-gallery/existing1.png']),
             ])
             ->assertRedirect(route('venue-setup'));
 
@@ -70,5 +79,10 @@ class VenueSetupDisplayTest extends TestCase
         $this->assertSame('06:00', $venue->opening_time);
         $this->assertSame('23:00', $venue->closing_time);
         $this->assertSame('250.00', number_format((float) $venue->default_hourly_rate, 2, '.', ''));
+        
+        $this->assertNotNull($venue->logo_path);
+        $this->assertNotNull($venue->cover_photo_path);
+        $this->assertCount(3, $venue->gallery_paths);
+        $this->assertContains('venue-gallery/existing1.png', $venue->gallery_paths);
     }
 }

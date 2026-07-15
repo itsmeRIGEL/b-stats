@@ -392,6 +392,7 @@ const confirmAction = ref<null | (() => void)>(null);
 const showReplacePlayerModal = ref(false);
 const replacingSlot = ref<'p1' | 'p2' | 'p3' | 'p4' | null>(null);
 const replacementPlayerId = ref<number | null>(null);
+const showCustomMatchModal = ref(false);
 
 let alertTimeout: any = null;
 const showSystemAlert = (message: string, tone: 'info' | 'error' = 'info') => {
@@ -1651,7 +1652,14 @@ const hydrateQueueState = (sharedState?: SharedScoringState | null) => {
                 .map(mapRegisteredPlayerToSessionPlayer);
         }
 
-        const playerMap = sessionPlayerMap.value;
+        const allHydratedPlayers = [
+            ...(isPlayerScoringMode.value ? [] : props.players),
+            ...derivedBookingRosterPlayers.value,
+            ...localRegisteredSessionPlayers.value,
+            ...derivedTemporaryMatchPlayers.value,
+            ...tempSessionPlayers.value,
+        ];
+        const playerMap = new Map(allHydratedPlayers.map((player) => [player.id, player]));
 
         if (Array.isArray(parsed.activePlayerIds)) {
             activePlayerIds.value = new Set(parsed.activePlayerIds.filter((id) => playerMap.has(id)));
@@ -2115,11 +2123,16 @@ const getPlayerTotalFee = (player: any) => {
     return totalFee;
 };
 
+const isHydrated = ref(false);
+
 onMounted(() => {
     hydrateQueueState();
     if (isPlayerScoringViewOnly.value) {
         router.reload({ only: POLL_RELOAD });
     }
+    setTimeout(() => {
+        isHydrated.value = true;
+    }, 1000);
 });
 
 watch(
@@ -2133,6 +2146,7 @@ watch(
 );
 
 watch(isQueueLocked, (locked) => {
+    if (!isHydrated.value) return;
     if (locked && canSaveSession.value && canEditScoringBoard.value) {
         localMatches.value = [];
         if (isPlayerScoringMode.value) {

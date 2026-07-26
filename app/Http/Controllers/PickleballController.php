@@ -1125,30 +1125,31 @@ class PickleballController extends Controller
                     ->where('booking_date', $now->toDateString())
                     ->where('start_time', '<=', $now->toTimeString())
                     ->where('end_time', '>', $now->toTimeString())
-                    ->when($venueId, fn($q) => $q->where('venue_id', $venueId))
                     ->where(function ($query) use ($user, $player) {
-                        $query->whereHas('players', fn($q) => $q->where('players.id', $player->id)->where('booking_player.status', 'accepted'))
-                            ->orWhere('user_id', $user->id)
-                            ->orWhereJsonContains('scoring_state->localRegisteredPlayerIds', $player->id)
-                            ->orWhereJsonContains('scoring_state->activePlayerIds', $player->id)
-                            ->orWhereRaw('LOWER(lead_name) = ?', [strtolower($user->username ?? '')])
-                            ->orWhereRaw('LOWER(lead_name) = ?', [strtolower($user->name ?? '')])
-                            ->orWhereRaw('LOWER(lead_name) = ?', [strtolower($player->name ?? '')]);
+                        $query->where('user_id', $user->id)
+                            ->orWhereHas('players', fn($q) => $q->where('players.id', $player->id)->where('booking_player.status', 'accepted'));
                     })
                     ->first();
 
+                $pendingBooking = null;
+                if (!$activeBooking) {
+                    $pendingBooking = Booking::where('status', 'approved')
+                        ->where('booking_date', $now->toDateString())
+                        ->where('start_time', '<=', $now->toTimeString())
+                        ->where('end_time', '>', $now->toTimeString())
+                        ->whereHas('players', fn($q) => $q->where('players.id', $player->id)->where('booking_player.status', 'pending'))
+                        ->first();
+                }
+
                 if ($activeBooking) {
-                    // Auto-attach player to the booking if not already attached
-                    if (!$activeBooking->players()->where('players.id', $player->id)->exists()) {
+                    // Auto-attach booking creator if missing from pivot
+                    if ((int)$activeBooking->user_id === (int)$user->id && !$activeBooking->players()->where('players.id', $player->id)->exists()) {
                         $activeBooking->players()->attach($player->id, ['status' => 'accepted']);
                     }
 
-                    $isInvited = $activeBooking->players()
-                        ->where('players.id', $player->id)
-                        ->where('booking_player.invited_by_user_id', '!=', null)
-                        ->exists();
+                    $isInvited = (int)$activeBooking->user_id !== (int)$user->id;
 
-                     $playerBooking = [
+                    $playerBooking = [
                         'id' => $activeBooking->id,
                         'user_id' => $activeBooking->user_id,
                         'court_number' => $activeBooking->court_number,
@@ -1172,6 +1173,9 @@ class PickleballController extends Controller
                             'user_id' => $p->user_id,
                             'responded_at' => $p->pivot->responded_at,
                         ]);
+                } else if ($pendingBooking) {
+                    $playerScoringBlocked = true;
+                    $playerScoringNotice = "You have a pending invitation to play at " . ($pendingBooking->venue?->name ?? 'Venue') . " (Court " . $pendingBooking->court_number . "). Please accept your invitation in notifications to access scoring.";
                 } else {
                     $playerScoringBlocked = true;
                     $playerScoringNotice = "You don't have an active booking or invitation for this session. Book a venue first to access scoring.";
@@ -1236,15 +1240,20 @@ class PickleballController extends Controller
             $assignedCourts = array_values(array_unique(array_merge($assignedCourtsList, $bookingCourtsToday)));
         }
 
-        $sessionPlayersQuery = Player::with('user')->where('in_session', true);
-        if ($venueId) {
-            $sessionPlayersQuery->where('venue_id', $venueId);
+        $effectiveVenueId = $venueId;
+        if ($user && $user->isPlayer() && $activeBooking && $activeBooking->venue_id) {
+            $effectiveVenueId = $activeBooking->venue_id;
         }
-        $players = $sessionPlayersQuery->get()->map(function ($player) use ($venueId) {
+
+        $sessionPlayersQuery = Player::with('user')->where('in_session', true);
+        if ($effectiveVenueId) {
+            $sessionPlayersQuery->where('venue_id', $effectiveVenueId);
+        }
+        $players = $sessionPlayersQuery->get()->map(function ($player) use ($effectiveVenueId) {
             $player->name = $player->user?->username ?? $player->name;
             $untalliedQuery = GameMatch::where('is_tallied', false);
-            if ($venueId) {
-                $untalliedQuery->where('venue_id', $venueId);
+            if ($effectiveVenueId) {
+                $untalliedQuery->where('venue_id', $effectiveVenueId);
             }
             $matchesAsP1 = (clone $untalliedQuery)->where('player_1_id', $player->id)->get();
             $matchesAsP2 = (clone $untalliedQuery)->where('player_2_id', $player->id)->get();
@@ -1291,8 +1300,8 @@ class PickleballController extends Controller
         $todayBookingsQuery = Booking::where('booking_date', $now->toDateString())
             ->where('start_time', '<=', $now->toTimeString())
             ->where('status', 'approved');
-        if ($venueId) {
-            $todayBookingsQuery->where('venue_id', $venueId);
+        if ($effectiveVenueId) {
+            $todayBookingsQuery->where('venue_id', $effectiveVenueId);
         }
         $allTodayBookings = $todayBookingsQuery->get(['id', 'court_number', 'type', 'start_time', 'end_time', 'lead_name']);
 
@@ -1324,8 +1333,8 @@ class PickleballController extends Controller
 
             if ($bookingPlayerIds->isNotEmpty()) {
                 $playerUpdateQuery = Player::whereIn('id', $bookingPlayerIds)->where('in_session', false);
-                if ($venueId) {
-                    $playerUpdateQuery->where('venue_id', $venueId);
+                if ($effectiveVenueId) {
+                    $playerUpdateQuery->where('venue_id', $effectiveVenueId);
                 }
                 $playerUpdateQuery->update(['in_session' => true]);
             }
@@ -1352,19 +1361,14 @@ class PickleballController extends Controller
         $untalliedMatchesQuery = GameMatch::with(['player1', 'player2', 'player3', 'player4', 'booking'])
                         ->where('is_tallied', false)
                         ->orderBy('created_at', 'desc');
-        if ($venueId) {
-            $untalliedMatchesQuery->where('venue_id', $venueId);
-        }
-
-        $allPlayersQuery = Player::with('user')->select('id', 'name', 'is_member', 'user_id');
-        if ($venueId) {
-            $allPlayersQuery->where('venue_id', $venueId);
+        if ($effectiveVenueId) {
+            $untalliedMatchesQuery->where('venue_id', $effectiveVenueId);
         }
 
         return Inertia::render('Scoring', [
             'matches' => $untalliedMatchesQuery->get(),
             'players' => $players,
-            'allPlayers' => $allPlayersQuery->get()->map(fn($p) => ['id' => $p->id, 'name' => $p->user?->username ?? $p->name, 'is_member' => $p->is_member]),
+            'allPlayers' => $this->getAllPlayersForScoring($effectiveVenueId),
             'settings' => [
                 'court_count' => $settings['court_count'] ?? '1',
                 'walkin_courts' => $settings['walkin_courts'] ?? '',
@@ -1440,6 +1444,35 @@ class PickleballController extends Controller
         ]);
 
         return redirect()->back();
+    }
+
+    private function getAllPlayersForScoring($venueId = null)
+    {
+        // Auto-create missing Player records for registered player users
+        \App\Models\User::where('role', 'player')->get()->each(function ($u) {
+            Player::firstOrCreate(
+                ['user_id' => $u->id],
+                ['name' => $u->name, 'full_name' => $u->name, 'show_in_roster' => true]
+            );
+        });
+
+        $allPlayersQuery = Player::with('user')->select('id', 'name', 'is_member', 'user_id', 'venue_id');
+        if ($venueId) {
+            $allPlayersQuery->where(function ($q) use ($venueId) {
+                $q->where('venue_id', $venueId)
+                  ->orWhereNull('venue_id')
+                  ->orWhereNotNull('user_id');
+            });
+        }
+
+        return $allPlayersQuery->get()->map(function ($p) {
+            $displayName = ($p->user?->username && trim($p->user->username) !== '') ? $p->user->username : $p->name;
+            return [
+                'id' => $p->id,
+                'name' => $displayName,
+                'is_member' => (bool) $p->is_member,
+            ];
+        })->unique('id')->values();
     }
 
     private function getAllTimeStatsData($venueId = null)
@@ -1877,17 +1910,12 @@ class PickleballController extends Controller
             $sessionPlayersQuery->where('venue_id', $venueId);
         }
 
-        $allPlayersQuery = Player::with('user')->select('id', 'name', 'is_member', 'user_id');
-        if ($venueId) {
-            $allPlayersQuery->where('venue_id', $venueId);
-        }
-
         $sessionPlayersQuery->with('user');
-        $sessionPlayers = $sessionPlayersQuery->get()->map(fn($p) => tap($p, fn($p) => $p->name = $p->user?->username ?? $p->name));
+        $sessionPlayers = $sessionPlayersQuery->get()->map(fn($p) => tap($p, fn($p) => $p->name = ($p->user?->username && trim($p->user->username) !== '') ? $p->user->username : $p->name));
 
         return Inertia::render('Scoring', [
             'players' => $sessionPlayers,
-            'allPlayers' => $allPlayersQuery->get()->map(fn($p) => ['id' => $p->id, 'name' => $p->user?->username ?? $p->name, 'is_member' => $p->is_member]),
+            'allPlayers' => $this->getAllPlayersForScoring($venueId),
         ]);
     }
 
@@ -2468,7 +2496,7 @@ class PickleballController extends Controller
 
         if ($bookingId) {
             $booking = Booking::find($bookingId);
-        } else if ($user->isPlayer()) {
+        } else if ($user && $user->isPlayer()) {
             $player = Player::where('user_id', $user->id)->first();
             if ($player) {
                 $now = now();
@@ -2476,7 +2504,10 @@ class PickleballController extends Controller
                     ->where('booking_date', $now->toDateString())
                     ->where('start_time', '<=', $now->toTimeString())
                     ->where('end_time', '>', $now->toTimeString())
-                    ->whereHas('players', fn($q) => $q->where('players.id', $player->id))
+                    ->where(function ($q) use ($user, $player) {
+                        $q->whereHas('players', fn($sq) => $sq->where('players.id', $player->id))
+                          ->orWhere('user_id', $user->id);
+                    })
                     ->first();
             }
         }

@@ -1664,7 +1664,7 @@ onUnmounted(() => {
                                             <Clock class="h-4 w-4 text-blue-500 dark:text-green-500" />
                                             <span class="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Time & Schedule</span>
                                         </div>
-                                        <div class="grid grid-cols-4 gap-2">
+                                        <div class="grid grid-cols-4 gap-2 max-h-[224px] overflow-y-auto pr-1 custom-scrollbar">
                                             <div
                                                 v-for="slot in dayDetailSlots"
                                                 :key="slot.start"
@@ -1983,7 +1983,7 @@ onUnmounted(() => {
                                                 <Clock class="h-3.5 w-3.5 text-blue-500 dark:text-green-500" />
                                                 <span class="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Time & Schedule</span>
                                             </div>
-                                            <div class="grid grid-cols-4 gap-2">
+                                            <div class="grid grid-cols-4 gap-2 max-h-[224px] overflow-y-auto pr-1 custom-scrollbar">
                                                 <button
                                                     v-for="slot in generatedSlots"
                                                     :key="slot.start"
@@ -2665,11 +2665,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
 .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+    background: transparent !important;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
     background: rgba(148, 163, 184, 0.4);

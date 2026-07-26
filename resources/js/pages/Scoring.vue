@@ -461,6 +461,12 @@ const createTemporaryPlayer = (name: string) => {
     };
 
     tempSessionPlayers.value = [...tempSessionPlayers.value, temporaryPlayer];
+
+    const newSet = new Set(activePlayerIds.value);
+    newSet.add(temporaryPlayer.id);
+    activePlayerIds.value = newSet;
+
+    saveQueueState();
     return temporaryPlayer;
 };
 
@@ -493,6 +499,8 @@ const addLocalRegisteredPlayersToSession = (players: any[]) => {
         registerLateJoinerOffset(playerId);
     }
     activePlayerIds.value = newSet;
+
+    saveQueueState();
 };
 
 const removeTemporaryPlayerState = (playerId: number) => {
@@ -513,7 +521,6 @@ const removeTemporaryPlayerState = (playerId: number) => {
         const currentIds = [currentMatch.value.p1?.id, currentMatch.value.p2?.id, currentMatch.value.p3?.id, currentMatch.value.p4?.id].filter(
             (id): id is number => id != null,
         );
-
         if (currentIds.includes(playerId)) {
             currentMatch.value = null;
             matchStarted.value = false;
@@ -871,7 +878,7 @@ const modalFilteredPlayers = computed(() => {
         return p.name.toLowerCase().includes(query);
     });
     const list = query ? props.allPlayers.filter((p) => p.name.toLowerCase().includes(query)) : props.allPlayers;
-    return [...temps, ...list].slice(0, 30);
+    return [...temps, ...list].slice(0, 100);
 });
 
 const rosterPlayerIds = computed(() => new Set(sessionPlayers.value.map((p) => p.id)));
@@ -1001,28 +1008,31 @@ const showGroupSetupModal = ref(false);
 const playerGroups = ref<Array<{ type: 'none' | 'pair' | 'quad'; playerIds: (number | null)[] }>>([
     { type: 'none', playerIds: [] },
 ]);
+const draftPlayerGroups = ref<Array<{ type: 'none' | 'pair' | 'quad'; playerIds: (number | null)[] }>>([
+    { type: 'pair', playerIds: [null, null] },
+]);
 
 const handleGroupTypeChange = (idx: number) => {
-    const type = playerGroups.value[idx].type;
+    const type = draftPlayerGroups.value[idx].type;
     if (type === 'none') {
-        playerGroups.value[idx].playerIds = [];
+        draftPlayerGroups.value[idx].playerIds = [];
     } else if (type === 'pair') {
-        playerGroups.value[idx].playerIds = [null, null];
+        draftPlayerGroups.value[idx].playerIds = [null, null];
     } else if (type === 'quad') {
-        playerGroups.value[idx].playerIds = [null, null, null, null];
+        draftPlayerGroups.value[idx].playerIds = [null, null, null, null];
     }
 };
 
 const addGroup = () => {
-    if (playerGroups.value.length < 4) {
-        playerGroups.value.push({ type: 'none', playerIds: [] });
+    if (draftPlayerGroups.value.length < 4) {
+        draftPlayerGroups.value.push({ type: 'pair', playerIds: [null, null] });
     }
 };
 
 const removeGroup = (idx: number) => {
-    playerGroups.value.splice(idx, 1);
-    if (playerGroups.value.length === 0) {
-        playerGroups.value.push({ type: 'none', playerIds: [] });
+    draftPlayerGroups.value.splice(idx, 1);
+    if (draftPlayerGroups.value.length === 0) {
+        draftPlayerGroups.value.push({ type: 'pair', playerIds: [null, null] });
     }
 };
 
@@ -1036,53 +1046,14 @@ const openGroupSetupModal = () => {
         return;
     }
 
-    const raw = sharedScoringStateSyncEnabled.value ? JSON.stringify(props.scoringState ?? null) : localStorage.getItem(scoringQueueStorageKey.value);
-    if (raw) {
-        try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed.playerGroups)) {
-                playerGroups.value = parsed.playerGroups
-                    .filter((g: any) => g.type !== 'none')
-                    .map((g: any) => ({
-                        type: g.type || 'none',
-                        playerIds: Array.isArray(g.playerIds) ? [...g.playerIds] : []
-                    }));
-                
-                if (playerGroups.value.length === 0) {
-                    playerGroups.value.push({ type: 'none', playerIds: [] });
-                }
-                showGroupSetupModal.value = true;
-                return;
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    const visited = new Set<number>();
-    const currentPairs: Array<{ p1: number; p2: number }> = [];
-    const activeRosterIds = new Set(sessionPlayers.value.filter(p => activePlayerIds.value.has(p.id)).map(p => p.id));
-
-    for (const [idStr, partnerId] of Object.entries(playerPairs.value)) {
-        const id = Number(idStr);
-        if (visited.has(id) || visited.has(partnerId)) continue;
-        if (activeRosterIds.has(id) && activeRosterIds.has(partnerId)) {
-            currentPairs.push({ p1: id, p2: partnerId });
-            visited.add(id);
-            visited.add(partnerId);
-        }
-    }
-
-    playerGroups.value = [];
-    for (let i = 0; i < Math.min(currentPairs.length, 4); i++) {
-        playerGroups.value.push({
-            type: 'pair',
-            playerIds: [currentPairs[i].p1, currentPairs[i].p2]
-        });
-    }
-
-    if (playerGroups.value.length === 0) {
-        playerGroups.value.push({ type: 'none', playerIds: [] });
+    const currentSaved = playerGroups.value.filter((g) => g.type !== 'none');
+    if (currentSaved.length > 0) {
+        draftPlayerGroups.value = currentSaved.map((g) => ({
+            type: g.type,
+            playerIds: [...g.playerIds],
+        }));
+    } else {
+        draftPlayerGroups.value = [{ type: 'pair', playerIds: [null, null] }];
     }
 
     showGroupSetupModal.value = true;
@@ -1093,16 +1064,27 @@ const closeGroupSetupModal = () => {
 };
 
 const clearGroupSetup = () => {
-    playerGroups.value = [
-        { type: 'none', playerIds: [] }
+    draftPlayerGroups.value = [
+        { type: 'pair', playerIds: [null, null] }
     ];
 };
 
 const saveGroupSetup = () => {
-    let totalPlayersCount = 0;
-    playerGroups.value.forEach(g => {
+    for (let i = 0; i < draftPlayerGroups.value.length; i++) {
+        const g = draftPlayerGroups.value[i];
         if (g.type !== 'none') {
-            totalPlayersCount += g.playerIds.filter(id => id !== null).length;
+            const unselectedCount = g.playerIds.filter((id) => id === null).length;
+            if (unselectedCount > 0) {
+                showSystemAlert(`Please select all player slots for Group ${i + 1} or change its status to Disabled.`, 'error');
+                return;
+            }
+        }
+    }
+
+    let totalPlayersCount = 0;
+    draftPlayerGroups.value.forEach((g) => {
+        if (g.type !== 'none') {
+            totalPlayersCount += g.playerIds.filter((id) => id !== null).length;
         }
     });
 
@@ -1111,8 +1093,12 @@ const saveGroupSetup = () => {
         return;
     }
 
-    // Filter out groups with type 'none' before saving
-    playerGroups.value = playerGroups.value.filter(g => g.type !== 'none');
+    playerGroups.value = draftPlayerGroups.value
+        .filter((g) => g.type !== 'none')
+        .map((g) => ({
+            type: g.type,
+            playerIds: [...g.playerIds],
+        }));
 
     // Automatically clear all legacy simple paired players
     playerPairs.value = {};
@@ -1124,7 +1110,7 @@ const saveGroupSetup = () => {
 
 const getAvailableGroupPlayers = (groupIndex: number, playerSlotIndex: number) => {
     const selectedIds = new Set<number>();
-    playerGroups.value.forEach((g, gIdx) => {
+    draftPlayerGroups.value.forEach((g, gIdx) => {
         g.playerIds.forEach((pid, pIdx) => {
             if (pid !== null) {
                 if (gIdx !== groupIndex || pIdx !== playerSlotIndex) {
@@ -1134,7 +1120,7 @@ const getAvailableGroupPlayers = (groupIndex: number, playerSlotIndex: number) =
         });
     });
 
-    return sessionPlayers.value.filter(p => activePlayerIds.value.has(p.id) && !selectedIds.has(p.id));
+    return sessionPlayers.value.filter((p) => activePlayerIds.value.has(p.id) && !selectedIds.has(p.id));
 };
 
 const getPlayerGroupInfo = (playerId: number) => {
@@ -1452,7 +1438,10 @@ const persistSharedScoringState = async (state: SharedScoringState | null) => {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ state }),
+        body: JSON.stringify({
+            state,
+            booking_id: props.playerBooking?.id ?? null,
+        }),
     });
 };
 
@@ -1468,7 +1457,7 @@ const saveQueueState = () => {
         }
         scoringStateSaveTimer = setTimeout(() => {
             void persistSharedScoringState(payload);
-        }, 200);
+        }, 50);
         return;
     }
 
@@ -1603,8 +1592,8 @@ const resetQueue = () => {
 const hydrateQueueState = (sharedState?: SharedScoringState | null) => {
     const raw = sharedState !== undefined
         ? JSON.stringify(sharedState)
-        : sharedScoringStateSyncEnabled.value
-          ? JSON.stringify(props.scoringState ?? null)
+        : (sharedScoringStateSyncEnabled.value && props.scoringState)
+          ? JSON.stringify(props.scoringState)
           : localStorage.getItem(scoringQueueStorageKey.value);
 
     tempSessionPlayers.value = [];
@@ -1614,7 +1603,9 @@ const hydrateQueueState = (sharedState?: SharedScoringState | null) => {
     currentMatch.value = null;
     lateJoinerOffsets.value = {};
     playerPairs.value = {};
-    playerGroups.value = [{ type: 'none', playerIds: [] }];
+    if (!showGroupSetupModal.value) {
+        playerGroups.value = [{ type: 'none', playerIds: [] }];
+    }
     nextTemporaryPlayerId.value = -1;
 
     if (!raw || raw === 'null') {
@@ -1683,35 +1674,37 @@ const hydrateQueueState = (sharedState?: SharedScoringState | null) => {
             playerPairs.value = parsed.playerPairs;
         }
 
-        if (Array.isArray(parsed.playerGroups)) {
-            playerGroups.value = parsed.playerGroups.map((group: any) => ({
-                type: group.type || 'none',
-                playerIds: Array.isArray(group.playerIds) ? [...group.playerIds] : [],
-            }));
-        } else {
-            const visited = new Set<number>();
-            const currentPairs: Array<{ p1: number; p2: number }> = [];
-            const activeRosterIds = new Set(sessionPlayers.value.filter((p) => activePlayerIds.value.has(p.id)).map((p) => p.id));
+        if (!showGroupSetupModal.value) {
+            if (Array.isArray(parsed.playerGroups)) {
+                playerGroups.value = parsed.playerGroups.map((group: any) => ({
+                    type: group.type || 'none',
+                    playerIds: Array.isArray(group.playerIds) ? [...group.playerIds] : [],
+                }));
+            } else {
+                const visited = new Set<number>();
+                const currentPairs: Array<{ p1: number; p2: number }> = [];
+                const activeRosterIds = new Set(sessionPlayers.value.filter((p) => activePlayerIds.value.has(p.id)).map((p) => p.id));
 
-            for (const [idStr, partnerId] of Object.entries(playerPairs.value)) {
-                const id = Number(idStr);
-                if (visited.has(id) || visited.has(partnerId)) continue;
-                if (activeRosterIds.has(id) && activeRosterIds.has(partnerId)) {
-                    currentPairs.push({ p1: id, p2: partnerId });
-                    visited.add(id);
-                    visited.add(partnerId);
+                for (const [idStr, partnerId] of Object.entries(playerPairs.value)) {
+                    const id = Number(idStr);
+                    if (visited.has(id) || visited.has(partnerId)) continue;
+                    if (activeRosterIds.has(id) && activeRosterIds.has(partnerId)) {
+                        currentPairs.push({ p1: id, p2: partnerId });
+                        visited.add(id);
+                        visited.add(partnerId);
+                    }
                 }
-            }
 
-            playerGroups.value = [];
-            for (let i = 0; i < Math.min(currentPairs.length, 4); i++) {
-                playerGroups.value.push({
-                    type: 'pair',
-                    playerIds: [currentPairs[i].p1, currentPairs[i].p2],
-                });
-            }
-            if (playerGroups.value.length === 0) {
-                playerGroups.value.push({ type: 'none', playerIds: [] });
+                playerGroups.value = [];
+                for (let i = 0; i < Math.min(currentPairs.length, 4); i++) {
+                    playerGroups.value.push({
+                        type: 'pair',
+                        playerIds: [currentPairs[i].p1, currentPairs[i].p2],
+                    });
+                }
+                if (playerGroups.value.length === 0) {
+                    playerGroups.value.push({ type: 'none', playerIds: [] });
+                }
             }
         }
 
@@ -1751,34 +1744,139 @@ const queueModalEntries = computed(() => {
 });
 
 const openQueueModal = () => {
-    if (!canEditScoringBoard.value) {
-        return;
-    }
     if (isQueueLocked.value) {
         showSystemAlert('Queue is locked. Booking has expired.', 'error');
         return;
     }
 
-    const availablePlayers = sessionPlayers.value.filter((p) => activePlayerIds.value.has(p.id));
-    if (availablePlayers.length >= 2 && queuedMatches.value.length < AUTO_FILL_COUNT) {
-        const slotsToFill = AUTO_FILL_COUNT - queuedMatches.value.length;
-        const tempAddedMatches: QueuedMatch[] = [];
-        for (let i = 0; i < slotsToFill; i++) {
-            const isDoubles = availablePlayers.length >= 4;
-            const numRequired = isDoubles ? 4 : 2;
-            const selected = getFairSelectedPlayers(availablePlayers, numRequired, tempAddedMatches);
-            tempAddedMatches.push({
-                player1Id: selected[0].id,
-                player2Id: selected[1].id,
-                player3Id: isDoubles ? selected[2].id : null,
-                player4Id: isDoubles ? selected[3].id : null,
-            });
+    if (!isPlayerScoringViewOnly.value) {
+        const availablePlayers = sessionPlayers.value.filter((p) => activePlayerIds.value.has(p.id));
+        if (availablePlayers.length >= 2 && queuedMatches.value.length < AUTO_FILL_COUNT) {
+            const slotsToFill = AUTO_FILL_COUNT - queuedMatches.value.length;
+            const tempAddedMatches: QueuedMatch[] = [];
+            for (let i = 0; i < slotsToFill; i++) {
+                const isDoubles = availablePlayers.length >= 4;
+                const numRequired = isDoubles ? 4 : 2;
+                const selected = getFairSelectedPlayers(availablePlayers, numRequired, tempAddedMatches);
+                tempAddedMatches.push({
+                    player1Id: selected[0].id,
+                    player2Id: selected[1].id,
+                    player3Id: isDoubles ? selected[2].id : null,
+                    player4Id: isDoubles ? selected[3].id : null,
+                });
+            }
+            queuedMatches.value = [...queuedMatches.value, ...tempAddedMatches];
+            saveQueueState();
         }
-        queuedMatches.value = [...queuedMatches.value, ...tempAddedMatches];
-        saveQueueState();
     }
 
     showQueueModal.value = true;
+};
+
+// --- Queue Drag & Reorder & Remove Helpers ---
+const draggedQueueIndex = ref<number | null>(null);
+
+const moveQueueItem = (index: number, direction: 'up' | 'down') => {
+    if (!canEditScoringBoard.value || isQueueLocked.value) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= queuedMatches.value.length) return;
+
+    const copy = [...queuedMatches.value];
+    const [moved] = copy.splice(index, 1);
+    copy.splice(targetIndex, 0, moved);
+    queuedMatches.value = copy;
+    saveQueueState();
+};
+
+const removeFromQueue = (index: number) => {
+    if (!canEditScoringBoard.value || isQueueLocked.value) return;
+    if (index < 0 || index >= queuedMatches.value.length) return;
+    const copy = [...queuedMatches.value];
+    copy.splice(index, 1);
+    queuedMatches.value = copy;
+    saveQueueState();
+};
+
+const handleDragStart = (index: number) => {
+    if (!canEditScoringBoard.value || isQueueLocked.value) return;
+    draggedQueueIndex.value = index;
+};
+
+const handleDragOver = (e: DragEvent) => {
+    if (!canEditScoringBoard.value || isQueueLocked.value) return;
+    e.preventDefault();
+};
+
+const handleDrop = (targetIndex: number) => {
+    if (!canEditScoringBoard.value || isQueueLocked.value) return;
+    if (draggedQueueIndex.value === null || draggedQueueIndex.value === targetIndex) return;
+
+    const copy = [...queuedMatches.value];
+    const [moved] = copy.splice(draggedQueueIndex.value, 1);
+    copy.splice(targetIndex, 0, moved);
+    queuedMatches.value = copy;
+    draggedQueueIndex.value = null;
+    saveQueueState();
+};
+
+const fillQueueToMax = () => {
+    if (!canEditScoringBoard.value || isQueueLocked.value) return;
+    const availablePlayers = sessionPlayers.value.filter((p) => activePlayerIds.value.has(p.id));
+    if (availablePlayers.length < 2) {
+        showSystemAlert('Please activate at least 2 players in the roster.', 'error');
+        return;
+    }
+    const countToAdd = Math.min(5, MAX_QUEUE - queuedMatches.value.length);
+    if (countToAdd <= 0) {
+        showSystemAlert(`Queue is full (max ${MAX_QUEUE} matches).`, 'info');
+        return;
+    }
+
+    const tempAddedMatches: QueuedMatch[] = [];
+    for (let i = 0; i < countToAdd; i++) {
+        const isDoubles = availablePlayers.length >= 4;
+        const numRequired = isDoubles ? 4 : 2;
+        const selected = getFairSelectedPlayers(availablePlayers, numRequired, tempAddedMatches);
+        tempAddedMatches.push({
+            player1Id: selected[0].id,
+            player2Id: selected[1].id,
+            player3Id: isDoubles ? selected[2].id : null,
+            player4Id: isDoubles ? selected[3].id : null,
+        });
+    }
+
+    queuedMatches.value = [...queuedMatches.value, ...tempAddedMatches];
+    saveQueueState();
+    showSystemAlert(`Added ${countToAdd} match(es) to queue.`, 'info');
+};
+
+const openCustomMatchModal = () => {
+    if (!canEditScoringBoard.value || isQueueLocked.value) return;
+    if (queuedMatches.value.length >= MAX_QUEUE) {
+        showSystemAlert(`Queue is full (max ${MAX_QUEUE} matches).`, 'info');
+        return;
+    }
+
+    const availablePlayers = sessionPlayers.value.filter((p) => activePlayerIds.value.has(p.id));
+    if (availablePlayers.length < 2) {
+        showSystemAlert('Please activate at least 2 players in the roster.', 'error');
+        return;
+    }
+
+    const isDoubles = availablePlayers.length >= 4;
+    const numRequired = isDoubles ? 4 : 2;
+    const selected = getFairSelectedPlayers(availablePlayers, numRequired);
+    queuedMatches.value = [
+        ...queuedMatches.value,
+        {
+            player1Id: selected[0].id,
+            player2Id: selected[1].id,
+            player3Id: isDoubles ? selected[2].id : null,
+            player4Id: isDoubles ? selected[3].id : null,
+        },
+    ];
+    saveQueueState();
+    showSystemAlert('New match added to queue.', 'info');
 };
 
 const addRandomToQueue = () => {
@@ -2129,10 +2227,15 @@ onMounted(() => {
     hydrateQueueState();
     if (isPlayerScoringViewOnly.value) {
         router.reload({ only: POLL_RELOAD });
+        startPoll();
     }
     setTimeout(() => {
         isHydrated.value = true;
     }, 1000);
+});
+
+onUnmounted(() => {
+    stopPoll();
 });
 
 watch(
@@ -2399,11 +2502,10 @@ onUnmounted(() => {
                     <!-- NEXT GAME CONTAINER (always visible) -->
                     <div
                         v-if="currentMatch || nextMatchPreview"
-                        @click.self="isPlayerScoringViewOnly ? null : openQueueModal"
-                        class="mx-2 mb-2 shrink-0 rounded-lg border border-slate-300/60 bg-white/45 p-1.5 transition-colors dark:border-[#2a2a2a]/70 dark:bg-[#0a0a0a]/40"
-                        :class="isPlayerScoringViewOnly ? '' : 'cursor-pointer hover:border-indigo-400 dark:hover:border-green-500'"
+                        @click="openQueueModal"
+                        class="mx-2 mb-2 shrink-0 rounded-lg border border-slate-300/60 bg-white/45 p-1.5 transition-colors dark:border-[#2a2a2a]/70 dark:bg-[#0a0a0a]/40 cursor-pointer hover:border-indigo-400 dark:hover:border-green-500"
                     >
-                        <div class="pointer-events-none mb-1 flex items-center justify-center gap-1.5">
+                        <div class="mb-1 flex items-center justify-center gap-1.5 cursor-pointer">
                             <p class="text-center text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Next Game</p>
                             <span
                                 v-if="queuedMatches.length > 0"
@@ -2411,7 +2513,7 @@ onUnmounted(() => {
                                 >+{{ queuedMatches.length }} queued</span
                             >
                         </div>
-                        <div v-if="nextMatchPreview" @click.self="isPlayerScoringViewOnly ? null : openQueueModal" class="grid grid-cols-2 gap-1.5 sm:gap-1">
+                        <div v-if="nextMatchPreview" class="grid grid-cols-2 gap-1.5 sm:gap-1">
                             <button
                                 type="button"
                                 class="next-game-pill truncate transition-colors"
@@ -3483,14 +3585,15 @@ onUnmounted(() => {
                                 <div
                                     v-for="entry in queueModalEntries"
                                     :key="entry.index"
-                                    draggable="true"
-                                    @dragstart="handleDragStart(entry.index)"
-                                    @dragover="handleDragOver"
-                                    @drop="handleDrop(entry.index)"
-                                    class="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 transition-all hover:border-indigo-300 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]/30 dark:hover:border-green-700 cursor-move"
+                                    :draggable="!isPlayerScoringViewOnly"
+                                    @dragstart="isPlayerScoringViewOnly ? null : handleDragStart(entry.index)"
+                                    @dragover="isPlayerScoringViewOnly ? null : handleDragOver($event)"
+                                    @drop="isPlayerScoringViewOnly ? null : handleDrop(entry.index)"
+                                    class="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 transition-all dark:border-[#1a1a1a] dark:bg-[#0a0a0a]/30"
+                                    :class="isPlayerScoringViewOnly ? '' : 'hover:border-indigo-300 dark:hover:border-green-700 cursor-move'"
                                 >
                                     <!-- Drag grip handle -->
-                                    <div class="text-slate-300 dark:text-slate-700 cursor-move group-hover:text-slate-400">
+                                    <div v-if="!isPlayerScoringViewOnly" class="text-slate-300 dark:text-slate-700 cursor-move group-hover:text-slate-400">
                                         <GripVertical class="h-4 w-4" />
                                     </div>
                                     <div
@@ -3521,35 +3624,40 @@ onUnmounted(() => {
                                         </div>
                                     </div>
                                     <!-- Reorder controls (arrows) -->
-                                    <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div v-if="!isPlayerScoringViewOnly" class="flex items-center gap-1">
                                         <button
                                             v-if="entry.index > 0"
                                             @click.stop="moveQueueItem(entry.index, 'up')"
-                                            class="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-[#1a1a1a]"
+                                            class="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-[#1a1a1a] dark:hover:text-white"
                                             title="Move Up"
                                         >
-                                            <ArrowUp class="h-3.5 w-3.5" />
+                                            <ArrowUp class="h-4 w-4" />
                                         </button>
                                         <button
                                             v-if="entry.index < queueModalEntries.length - 1"
                                             @click.stop="moveQueueItem(entry.index, 'down')"
-                                            class="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-[#1a1a1a]"
+                                            class="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-[#1a1a1a] dark:hover:text-white"
                                             title="Move Down"
                                         >
-                                            <ArrowDown class="h-3.5 w-3.5" />
+                                            <ArrowDown class="h-4 w-4" />
                                         </button>
                                     </div>
                                     <button
+                                        v-if="!isPlayerScoringViewOnly"
                                         @click="removeFromQueue(entry.index)"
-                                        class="shrink-0 rounded-lg p-1.5 text-slate-400 opacity-0 transition-colors hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100 dark:hover:bg-rose-900/20"
+                                        class="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-500 dark:text-slate-400 dark:hover:bg-rose-900/30 dark:hover:text-rose-400"
+                                        title="Remove from queue"
                                     >
-                                        <Trash2 class="h-3.5 w-3.5" />
+                                        <Trash2 class="h-4 w-4" />
                                     </button>
                                 </div>
                             </div>
 
                             <!-- Footer Actions -->
-                            <div class="flex gap-2 border-t border-slate-200 bg-slate-50/50 p-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]/40">
+                            <div v-if="isPlayerScoringViewOnly" class="border-t border-slate-200 bg-slate-50/50 p-4 text-center dark:border-[#1a1a1a] dark:bg-[#0a0a0a]/40">
+                                <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">View-only queue display for invited players.</p>
+                            </div>
+                            <div v-else class="flex gap-2 border-t border-slate-200 bg-slate-50/50 p-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]/40">
                                 <button
                                     @click="openCustomMatchModal"
                                     :disabled="queueModalEntries.length >= MAX_QUEUE || isQueueLocked"
@@ -3846,117 +3954,125 @@ onUnmounted(() => {
         </div>
 
         <!-- SETUP FIXED PLAYING GROUPS MODAL -->
-        <div
-            v-if="showGroupSetupModal"
-            class="fixed inset-0 z-[116] flex items-center justify-center bg-white/20 p-4 transition-opacity dark:bg-[#0a0a0a]/40 sm:p-6"
-        >
-            <div
-                class="w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-lg dark:border-[#1a1a1a] dark:bg-[#0f0f0f]/90"
-            >
-                <!-- Header -->
-                <div class="flex items-center justify-between gap-3 border-b border-slate-200 p-5 dark:border-[#1a1a1a]">
-                    <div>
-                        <h3 class="text-base font-black uppercase tracking-widest text-slate-900 dark:text-white">Setup Fixed Groups</h3>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Link active players into Teammate Pairs (size 2) or Match Quads (size 4)</p>
-                    </div>
-                    <button
-                        @click="closeGroupSetupModal"
-                        class="rounded-lg bg-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-300 dark:bg-[#1a1a1a] dark:text-slate-400 dark:hover:bg-[#2a2a2a]"
-                    >
-                        <X class="h-4 w-4" />
-                    </button>
-                </div>
-
-                <!-- Content / Group Cards -->
-                <div class="custom-scrollbar max-h-[380px] space-y-4 overflow-y-auto p-5">
+        <Teleport to="body">
+            <Transition name="fade">
+                <div
+                    v-if="showGroupSetupModal"
+                    class="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6"
+                    @click.self="closeGroupSetupModal"
+                >
                     <div
-                        v-for="(group, idx) in playerGroups"
-                        :key="`player-group-${idx}`"
-                        class="relative rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]/30"
+                        class="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-[#1a1a1a] dark:bg-[#0f0f0f]"
                     >
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                            <span class="text-xs font-black uppercase tracking-widest text-indigo-500 dark:text-green-400">
-                                Group {{ idx + 1 }}
-                            </span>
-                            <div class="flex items-center gap-3">
-                                <select
-                                    v-model="group.type"
-                                    @change="handleGroupTypeChange(idx)"
-                                    class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-slate-700 dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:text-white"
-                                >
-                                    <option value="none">Disabled</option>
-                                    <option value="pair">Teammate Pair (2 Players)</option>
-                                    <option value="quad">Match Quad (4 Players)</option>
-                                </select>
+                        <!-- Header -->
+                        <div class="flex items-center justify-between gap-3 border-b border-slate-200 p-5 dark:border-[#1a1a1a]">
+                            <div>
+                                <h3 class="text-base font-black uppercase tracking-widest text-slate-900 dark:text-white">Setup Fixed Groups</h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Link active players into Teammate Pairs (size 2) or Match Quads (size 4)</p>
+                            </div>
+                            <button
+                                @click="closeGroupSetupModal"
+                                class="rounded-lg bg-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-300 dark:bg-[#1a1a1a] dark:text-slate-400 dark:hover:bg-[#2a2a2a]"
+                            >
+                                <X class="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <!-- Content / Group Cards -->
+                        <div class="custom-scrollbar max-h-[380px] space-y-4 overflow-y-auto p-5">
+                            <div
+                                v-for="(group, idx) in draftPlayerGroups"
+                                :key="`player-group-${idx}`"
+                                class="relative rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]/50"
+                            >
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                                    <span class="text-xs font-black uppercase tracking-widest text-indigo-500 dark:text-green-400">
+                                        Group {{ idx + 1 }}
+                                    </span>
+                                    <div class="flex items-center gap-3">
+                                        <select
+                                            v-model="group.type"
+                                            @change="handleGroupTypeChange(idx)"
+                                            class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:text-white"
+                                        >
+                                            <option value="none">Disabled</option>
+                                            <option value="pair">Teammate Pair (2 Players)</option>
+                                            <option value="quad">Match Quad (4 Players)</option>
+                                        </select>
+                                        <button
+                                            @click="removeGroup(idx)"
+                                            class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-red-500 transition-colors dark:hover:bg-slate-900 dark:hover:text-red-400"
+                                            title="Delete Group"
+                                        >
+                                            <Trash2 class="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Dropdowns depending on group type -->
+                                <div v-if="group.type !== 'none'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div v-for="pIdx in (group.type === 'pair' ? 2 : 4)" :key="`slot-${idx}-${pIdx}`">
+                                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                            Player {{ pIdx }}
+                                        </label>
+                                        <select
+                                            v-model="group.playerIds[pIdx - 1]"
+                                            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:text-white"
+                                        >
+                                            <option :value="null">— Select Player —</option>
+                                            <option
+                                                v-for="player in getAvailableGroupPlayers(idx, pIdx - 1)"
+                                                :key="`group-${idx}-p-${player.id}`"
+                                                :value="player.id"
+                                            >
+                                                {{ player.name }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div v-else class="py-2 text-center text-xs font-semibold text-slate-400">
+                                    Select "Teammate Pair" or "Match Quad" above to link players.
+                                </div>
+                            </div>
+
+                            <!-- Plus Button to Add Group -->
+                            <button
+                                v-if="draftPlayerGroups.length < 4"
+                                @click="addGroup"
+                                type="button"
+                                class="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 p-3 text-xs font-bold text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-300"
+                            >
+                                <Plus class="h-4 w-4" /> Add Group
+                            </button>
+                        </div>
+
+                        <!-- Footer Actions -->
+                        <div class="flex items-center justify-between gap-3 border-t border-slate-200 p-4 dark:border-[#1a1a1a]">
+                            <button
+                                @click="clearGroupSetup"
+                                class="rounded-lg border border-slate-300 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-50 dark:border-[#2a2a2a] dark:text-slate-300 dark:hover:bg-[#1a1a1a]"
+                            >
+                                Clear All
+                            </button>
+                            <div class="flex items-center gap-2">
                                 <button
-                                    @click="removeGroup(idx)"
-                                    class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-red-500 transition-colors dark:hover:bg-slate-900 dark:hover:text-red-400"
-                                    title="Delete Group"
+                                    @click="closeGroupSetupModal"
+                                    class="rounded-lg bg-slate-100 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-200 dark:bg-[#1a1a1a] dark:text-slate-300 dark:hover:bg-[#2a2a2a]"
                                 >
-                                    <Trash2 class="h-4 w-4" />
+                                    Cancel
+                                </button>
+                                <button
+                                    @click="saveGroupSetup"
+                                    class="rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-indigo-700 dark:bg-green-600 dark:hover:bg-green-500"
+                                >
+                                    Confirm Groups
                                 </button>
                             </div>
                         </div>
-
-                        <!-- Dropdowns depending on group type -->
-                        <div v-if="group.type !== 'none'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div v-for="pIdx in (group.type === 'pair' ? 2 : 4)" :key="`slot-${idx}-${pIdx}`">
-                                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                                    Player {{ pIdx }}
-                                </label>
-                                <select
-                                    v-model="group.playerIds[pIdx - 1]"
-                                    class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:text-white"
-                                >
-                                    <option :value="null">— Select —</option>
-                                    <option
-                                        v-for="player in getAvailableGroupPlayers(idx, pIdx - 1)"
-                                        :key="`group-${idx}-p-${player.id}`"
-                                        :value="player.id"
-                                    >
-                                        {{ player.name }}
-                                    </option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Plus Button to Add Group -->
-                    <button
-                        v-if="playerGroups.length < 4"
-                        @click="addGroup"
-                        type="button"
-                        class="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 p-3 text-xs font-bold text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-300"
-                    >
-                        <Plus class="h-4 w-4" /> Add Group
-                    </button>
-                </div>
-
-                <!-- Footer Actions -->
-                <div class="flex items-center justify-between gap-3 border-t border-slate-200 p-4 dark:border-[#1a1a1a]">
-                    <button
-                        @click="clearGroupSetup"
-                        class="rounded-lg border border-slate-300 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-50 dark:border-[#2a2a2a] dark:text-slate-300 dark:hover:bg-[#1a1a1a]"
-                    >
-                        Clear All
-                    </button>
-                    <div class="flex items-center gap-2">
-                        <button
-                            @click="closeGroupSetupModal"
-                            class="rounded-lg bg-slate-100 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-200 dark:bg-[#1a1a1a] dark:text-slate-300 dark:hover:bg-[#2a2a2a]"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            @click="saveGroupSetup"
-                            class="rounded-lg bg-indigo-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-indigo-700 dark:bg-green-600 dark:hover:bg-green-500"
-                        >
-                            Confirm Groups
-                        </button>
                     </div>
                 </div>
-            </div>
-        </div>
+            </Transition>
+        </Teleport>
     </AppLayout>
 </template>
 

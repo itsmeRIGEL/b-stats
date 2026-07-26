@@ -29,6 +29,7 @@ class Booking extends Model
         'scorer_id',
         'type',
         'venue_id',
+        'scoring_state',
     ];
 
     protected $casts = [

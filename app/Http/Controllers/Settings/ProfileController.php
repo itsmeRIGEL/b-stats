@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Models\Booking;
+use App\Models\GameMatch;
 use App\Models\Player;
 use App\Models\SystemSetting;
 use App\Models\User;
@@ -52,20 +54,40 @@ class ProfileController extends Controller
             ->latest('id')
             ->first()
             ?? Player::where('user_id', $user?->id)->latest('id')->first();
-        $playedVenues = Player::query()
-            ->with('venue:id,name')
-            ->where('user_id', $user?->id)
+        $playerProfiles = Player::where('user_id', $user?->id)->get();
+        $playerIds = $playerProfiles->pluck('id')->filter()->all();
+        $playerVenueIds = $playerProfiles->pluck('venue_id')->filter()->all();
+
+        $matchVenueIds = $playerIds !== []
+            ? GameMatch::where('is_tallied', true)
+                ->where(function ($q) use ($playerIds) {
+                    $q->whereIn('player_1_id', $playerIds)
+                      ->orWhereIn('player_2_id', $playerIds)
+                      ->orWhereIn('player_3_id', $playerIds)
+                      ->orWhereIn('player_4_id', $playerIds);
+                })
+                ->whereNotNull('venue_id')
+                ->pluck('venue_id')
+                ->all()
+            : [];
+
+        $bookingVenueIds = Booking::where('user_id', $user?->id)
             ->whereNotNull('venue_id')
-            ->get()
-            ->map(fn (Player $profile) => $profile->venue)
-            ->filter()
-            ->unique('id')
-            ->values()
-            ->map(fn (Venue $venue) => [
-                'id' => $venue->id,
-                'name' => $venue->name,
-            ])
+            ->pluck('venue_id')
             ->all();
+
+        $allVenueIds = array_values(array_unique(array_filter(array_merge($playerVenueIds, $matchVenueIds, $bookingVenueIds))));
+
+        $playedVenues = $allVenueIds !== []
+            ? Venue::query()
+                ->whereIn('id', $allVenueIds)
+                ->get(['id', 'name'])
+                ->map(fn (Venue $venue) => [
+                    'id' => $venue->id,
+                    'name' => $venue->name,
+                ])
+                ->all()
+            : [];
         $statsVenueName = $playerProfile?->venue_id
             ? Venue::query()->whereKey($playerProfile->venue_id)->value('name')
             : null;

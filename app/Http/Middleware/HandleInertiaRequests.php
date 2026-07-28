@@ -122,6 +122,7 @@ class HandleInertiaRequests extends Middleware
                     'message' => $invite['invited_by'] . " invited you to play at " . ($invite['venue_name'] ?? 'Venue') . " (Court " . $invite['court_number'] . ") on " . $invite['booking_date'] . " (" . substr($invite['start_time'], 0, 5) . " - " . substr($invite['end_time'], 0, 5) . ")",
                     'created_at' => $now->toIso8601String(),
                     'action_url' => '/scoring',
+                    'is_read' => false,
                     'meta' => $invite,
                 ];
             }
@@ -139,6 +140,7 @@ class HandleInertiaRequests extends Middleware
                     'message' => "Your booking request for " . $b->booking_date . " on Court " . $b->court_number . " has been " . $b->status . ".",
                     'created_at' => $b->updated_at?->toIso8601String() ?? $now->toIso8601String(),
                     'action_url' => '/all-time-stats',
+                    'is_read' => false,
                     'meta' => [
                         'booking_id' => $b->id,
                         'status' => $b->status,
@@ -160,6 +162,7 @@ class HandleInertiaRequests extends Middleware
                         'message' => "Your tournament request '" . $tr->name . "' has been " . $tr->status . ($tr->rejection_reason ? " Reason: " . $tr->rejection_reason : ""),
                         'created_at' => $tr->updated_at?->toIso8601String() ?? $now->toIso8601String(),
                         'action_url' => '/tournaments',
+                        'is_read' => false,
                         'meta' => [
                             'request_id' => $tr->id,
                             'status' => $tr->status,
@@ -179,6 +182,7 @@ class HandleInertiaRequests extends Middleware
                         'message' => "Your annual membership will expire on " . $playerProfile->membership_expires_at->toDateString() . ". Please renew soon.",
                         'created_at' => $now->toIso8601String(),
                         'action_url' => '/all-time-stats',
+                        'is_read' => false,
                     ];
                 }
             }
@@ -197,8 +201,11 @@ class HandleInertiaRequests extends Middleware
                     'message' => "New court booking request from " . $pb->lead_name . " on " . $pb->booking_date,
                     'created_at' => $pb->created_at?->toIso8601String() ?? $now->toIso8601String(),
                     'action_url' => '/bookings',
+                    'is_read' => false,
                     'meta' => [
                         'booking_id' => $pb->id,
+                        'lead_name' => $pb->lead_name,
+                        'court_number' => $pb->court_number,
                     ]
                 ];
             }
@@ -213,11 +220,36 @@ class HandleInertiaRequests extends Middleware
                         'message' => "New tournament request '" . $ptr->name . "' from " . ($ptr->user?->name ?? 'Guest'),
                         'created_at' => $ptr->created_at?->toIso8601String() ?? $now->toIso8601String(),
                         'action_url' => '/tournament-requests',
+                        'is_read' => false,
                         'meta' => [
                             'request_id' => $ptr->id,
                         ]
                     ];
                 }
+            }
+        }
+
+        // Active Scoring Sessions notifications (for Scorer/Scheduler-Scorer/Admin)
+        if ($user && in_array($user->role, ['admin', 'scorer', 'scheduler_scorer'], true)) {
+            $activeScoringSessions = Booking::where('status', 'approved')
+                ->whereDate('booking_date', now()->toDateString())
+                ->orderBy('start_time')
+                ->take(5)
+                ->get();
+            foreach ($activeScoringSessions as $as) {
+                $notifications[] = [
+                    'id' => 'active-session-' . $as->id,
+                    'type' => 'scoring',
+                    'title' => 'Court Session Ready for Scoring',
+                    'message' => "Court " . $as->court_number . " session on " . $as->booking_date . " (" . substr($as->start_time, 0, 5) . " - " . substr($as->end_time, 0, 5) . ") — " . ($as->lead_name ?? 'Active Session'),
+                    'created_at' => $as->updated_at?->toIso8601String() ?? $now->toIso8601String(),
+                    'action_url' => '/scoring',
+                    'is_read' => false,
+                    'meta' => [
+                        'booking_id' => $as->id,
+                        'court_number' => $as->court_number,
+                    ]
+                ];
             }
         }
 

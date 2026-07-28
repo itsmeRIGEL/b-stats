@@ -1,6 +1,7 @@
-<script setup lang="ts">
+ï»¿<script setup lang="ts">
 import AppLogo from '@/components/AppLogo.vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
+import NotificationCenter from '@/components/NotificationCenter.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -15,9 +16,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import UserMenuContent from '@/components/UserMenuContent.vue';
 import { getInitials } from '@/composables/useInitials';
-import type { BookingInvitation, BreadcrumbItem, NavItem, SharedData } from '@/types';
-import { Link, router, usePage } from '@inertiajs/vue3';
-import { Bell, BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-vue-next';
+import type { BreadcrumbItem, NavItem, SharedData } from '@/types';
+import { Link, usePage } from '@inertiajs/vue3';
+import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Props {
@@ -31,12 +32,6 @@ const props = withDefaults(defineProps<Props>(), {
 const page = usePage<SharedData>();
 const auth = computed(() => page.props.auth);
 const authDisplayName = computed(() => auth.value.user?.username?.trim() || auth.value.user?.first_name?.trim() || auth.value.user?.name || 'User');
-const bookingInvitations = computed<BookingInvitation[]>(() => page.props.bookingInvitations ?? []);
-const pendingInvitationCount = computed(() => bookingInvitations.value.filter((invitation) => invitation.status === 'pending').length);
-
-const respondToInvitation = (bookingId: number, response: 'accepted' | 'declined') => {
-    router.post('/scoring/invitations/' + bookingId + '/respond', { response }, { preserveScroll: true });
-};
 
 const isCurrentRoute = (url: string) => {
     return page.url === url;
@@ -70,6 +65,7 @@ const rightNavItems: NavItem[] = [
     <div>
         <div class="border-b border-sidebar-border/80">
             <div class="mx-auto flex h-16 items-center px-4 md:max-w-7xl">
+
                 <div class="lg:hidden">
                     <Sheet>
                         <SheetTrigger :as-child="true">
@@ -78,31 +74,27 @@ const rightNavItems: NavItem[] = [
                             </Button>
                         </SheetTrigger>
                         <SheetContent side="left" class="w-[300px] p-6">
-                            <SheetTitle class="sr-only">Navigation Menu</SheetTitle>
                             <SheetHeader class="flex justify-start text-left">
-                                <AppLogoIcon class="size-6 fill-current text-black dark:text-white" />
+                                <SheetTitle class="flex items-center gap-2">
+                                    <AppLogoIcon class="h-6 w-6 fill-current text-black dark:text-white" />
+                                </SheetTitle>
                             </SheetHeader>
-                            <div class="flex h-full flex-1 flex-col justify-between space-y-4 py-6">
-                                <nav class="-mx-3 space-y-1">
-                                    <Link
-                                        v-for="item in mainNavItems"
-                                        :key="item.title"
-                                        :href="item.href"
-                                        class="flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent"
-                                        :class="activeItemStyles(item.href)"
-                                    >
-                                        <component v-if="item.icon" :is="item.icon" class="h-5 w-5" />
-                                        {{ item.title }}
-                                    </Link>
-                                </nav>
+                            <div class="flex h-full flex-col justify-between space-y-4 py-6">
                                 <div class="flex flex-col space-y-4">
+                                    <Link v-for="item in mainNavItems" :key="item.title" :href="item.href" class="flex items-center space-x-2 text-sm font-semibold">
+                                        <component v-if="item.icon" :is="item.icon" class="h-5 w-5" />
+                                        <span>{{ item.title }}</span>
+                                    </Link>
+                                </div>
+
+                                <div class="flex flex-col space-y-4 font-medium">
                                     <a
                                         v-for="item in rightNavItems"
                                         :key="item.title"
                                         :href="item.href"
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        class="flex items-center space-x-2 text-sm font-medium"
+                                        class="flex items-center space-x-2 text-sm"
                                     >
                                         <component v-if="item.icon" :is="item.icon" class="h-5 w-5" />
                                         <span>{{ item.title }}</span>
@@ -162,45 +154,7 @@ const rightNavItems: NavItem[] = [
                         </div>
                     </div>
 
-                    <DropdownMenu>
-                        <DropdownMenuTrigger :as-child="true">
-                            <Button variant="ghost" size="icon" class="relative h-9 w-9 cursor-pointer">
-                                <Bell class="size-5 opacity-80 group-hover:opacity-100" />
-                                <span
-                                    v-if="pendingInvitationCount > 0"
-                                    class="absolute -right-0.5 -top-0.5 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white"
-                                >
-                                    {{ pendingInvitationCount }}
-                                </span>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-80 p-0">
-                            <div class="border-b px-4 py-3 text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">Invitations</div>
-                            <div v-if="bookingInvitations.length" class="max-h-96 space-y-3 overflow-y-auto p-3">
-                                <div v-for="invitation in bookingInvitations" :key="`${invitation.booking_id}-${invitation.start_time}`" class="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-                                    <p class="text-sm font-bold text-slate-900 dark:text-white">{{ invitation.invited_by }} invited you to play.</p>
-                                    <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        {{ invitation.venue_name || invitation.lead_name }} • Court {{ invitation.court_number }} • {{ invitation.booking_date }} {{ invitation.start_time }}-{{ invitation.end_time }}
-                                    </p>
-                                    <div class="mt-3 flex items-center gap-2">
-                                        <button
-                                            @click="respondToInvitation(invitation.booking_id, 'accepted')"
-                                            class="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-emerald-700"
-                                        >
-                                            Accept
-                                        </button>
-                                        <button
-                                            @click="respondToInvitation(invitation.booking_id, 'declined')"
-                                            class="rounded-lg bg-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 transition hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                                        >
-                                            Decline
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <p v-else class="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">No pending invitations right now.</p>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <NotificationCenter />
 
                     <DropdownMenu>
                         <DropdownMenuTrigger :as-child="true">
@@ -232,6 +186,3 @@ const rightNavItems: NavItem[] = [
         </div>
     </div>
 </template>
-
-
-

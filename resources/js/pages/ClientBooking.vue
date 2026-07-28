@@ -526,6 +526,25 @@ onBeforeUnmount(() => {
     stopPolling();
 });
 
+const isBookingPast = (dateStr?: string, endTimeStr?: string) => {
+    if (!dateStr) return false;
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    if (dateStr < todayStr) return true;
+
+    if (dateStr === todayStr && endTimeStr) {
+        const parts = endTimeStr.split(':').map(Number);
+        if (parts.length >= 2) {
+            const endDateTime = new Date();
+            endDateTime.setHours(parts[0], parts[1], 0, 0);
+            return now > endDateTime;
+        }
+    }
+
+    return false;
+};
+
 const form = useForm({
     booking_date: '',
     start_time: '',
@@ -1717,6 +1736,11 @@ onUnmounted(() => {
                                                     v-if="booking.status === 'pending'"
                                                     class="rounded-lg bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                                     >Pending</span
+                                                >
+                                                <span
+                                                    v-else-if="booking.status === 'approved' && isBookingPast(booking.booking_date, booking.end_time)"
+                                                    class="rounded-lg bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                                    >Completed</span
                                                 >
                                                 <span
                                                     v-else-if="booking.status === 'approved'"

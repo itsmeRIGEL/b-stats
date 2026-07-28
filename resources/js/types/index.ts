@@ -29,6 +29,17 @@ export interface BookingInvitation {
     status: 'pending' | 'accepted' | 'declined';
 }
 
+export interface AppNotification {
+    id: string;
+    type: 'invitation' | 'booking' | 'tournament' | 'membership' | 'scoring' | 'general';
+    title: string;
+    message: string;
+    created_at: string;
+    action_url?: string;
+    is_read?: boolean;
+    meta?: Record<string, any>;
+}
+
 export interface SharedData {
     name: string;
     appLogo: string | null;
@@ -36,6 +47,7 @@ export interface SharedData {
     quote: { message: string; author: string };
     auth: Auth;
     bookingInvitations?: BookingInvitation[];
+    notifications?: AppNotification[];
     ziggy: {
         location: string;
         url: string;

@@ -204,25 +204,71 @@ const getReclubLeaderboard = (matches: any[]) => {
     return getSessionLeaderboard(matches.filter((m: any) => !m.is_walkin && m.booking_type === 'reclub'));
 };
 
+const formatDateGroupDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+};
+
 const topPlayersInDateMatches = computed(() => {
     if (!selectedDateGroup.value) return [];
-    const matchPlayers = new Set<string>();
-    selectedDateGroup.value.matches.forEach((m: any) => {
-        m.team1.players.forEach((p: string) => matchPlayers.add(p.toLowerCase()));
-        m.team2.players.forEach((p: string) => matchPlayers.add(p.toLowerCase()));
+    const matches = selectedDateGroup.value.matches || [];
+    const matchPlayerIds = new Set<number>();
+    const matchPlayerNames = new Set<string>();
+
+    matches.forEach((m: any) => {
+        (m.team1?.player_ids || []).forEach((id: number) => matchPlayerIds.add(Number(id)));
+        (m.team2?.player_ids || []).forEach((id: number) => matchPlayerIds.add(Number(id)));
+        (m.team1?.players || []).forEach((p: string) => matchPlayerNames.add(p.toLowerCase()));
+        (m.team2?.players || []).forEach((p: string) => matchPlayerNames.add(p.toLowerCase()));
     });
-    return (activeLeaderboardGroup.value?.players ?? props.players)
-        .filter(p => matchPlayers.has(p.name.toLowerCase()))
+
+    const pool = activeLeaderboardGroup.value?.players ?? props.players ?? [];
+    return pool
+        .filter(p => matchPlayerIds.has(Number(p.id)) || matchPlayerNames.has((p.name || '').toLowerCase()) || matchPlayerNames.has(displayPlayerName(p).toLowerCase()))
         .sort((a, b) => b.points - a.points);
 });
 
-const getMatchesCountForDate = (playerName: string) => {
+const getMatchesCountForDate = (player: any) => {
     if (!selectedDateGroup.value) return 0;
-    const nameLower = playerName.toLowerCase();
-    return selectedDateGroup.value.matches.filter((m: any) => 
-        m.team1.players.some((p: string) => p.toLowerCase() === nameLower) ||
-        m.team2.players.some((p: string) => p.toLowerCase() === nameLower)
-    ).length;
+    const matches = selectedDateGroup.value.matches || [];
+    const pid = typeof player === 'object' ? Number(player.id) : null;
+    const nameLower = (typeof player === 'string' ? player : displayPlayerName(player)).toLowerCase();
+
+    return matches.filter((m: any) => {
+        if (pid && ((m.team1?.player_ids || []).map(Number).includes(pid) || (m.team2?.player_ids || []).map(Number).includes(pid))) {
+            return true;
+        }
+        return (m.team1?.players || []).some((p: string) => p.toLowerCase() === nameLower) ||
+               (m.team2?.players || []).some((p: string) => p.toLowerCase() === nameLower);
+    }).length;
+};
+
+const findMatchingPlayer = (playerOrName: any) => {
+    const pool = activeLeaderboardGroup.value?.players ?? props.players ?? [];
+    if (typeof playerOrName === 'object' && playerOrName?.id) {
+        const found = pool.find(p => Number(p.id) === Number(playerOrName.id));
+        if (found) return found;
+    }
+    if (typeof playerOrName === 'number' || !isNaN(Number(playerOrName))) {
+        const found = pool.find(p => Number(p.id) === Number(playerOrName));
+        if (found) return found;
+    }
+    const nameLower = String(playerOrName).toLowerCase();
+    return pool.find(p => (p.name || '').toLowerCase() === nameLower || displayPlayerName(p).toLowerCase() === nameLower) ?? null;
+};
+
+const handlePlayerClick = (playerOrName: any) => {
+    const playerObj = findMatchingPlayer(playerOrName);
+    if (playerObj) {
+        openPlayerDetails(playerObj);
+    }
 };
 
 const availableMonths = computed(() => {
@@ -247,10 +293,15 @@ const monthLabel = (ym: string) => {
 
 const selectedDateMatches = computed(() => {
     if (!selectedDateGroup.value) return [];
-    if (modalCategory.value === 'all') return selectedDateGroup.value.matches;
-    if (modalCategory.value === 'walkin') return selectedDateGroup.value.matches.filter((m: any) => m.is_walkin);
-    if (modalCategory.value === 'reclub') return selectedDateGroup.value.matches.filter((m: any) => !m.is_walkin && m.booking_type === 'reclub');
-    return selectedDateGroup.value.matches.filter((m: any) => !m.is_walkin && m.booking_type !== 'reclub');
+    const matches = selectedDateGroup.value.matches || [];
+    if (modalCategory.value === 'all') return matches;
+    if (modalCategory.value === 'walkin') {
+        return matches.filter((m: any) => Boolean(m.is_walkin) || m.booking_type === 'walk-in' || m.booking_type === 'walkin');
+    }
+    if (modalCategory.value === 'reclub') {
+        return matches.filter((m: any) => !m.is_walkin && m.booking_type === 'reclub');
+    }
+    return matches.filter((m: any) => !m.is_walkin && m.booking_type !== 'reclub' && m.booking_type !== 'walk-in' && m.booking_type !== 'walkin');
 });
 
 const groupedMatches = computed(() => {
@@ -1718,14 +1769,7 @@ onUnmounted(() => {
                             <div class="flex items-center gap-3">
                                 <Calendar class="h-5 w-5 text-indigo-500 dark:text-green-400" />
                                 <h2 class="text-base font-bold text-slate-900 dark:text-white">
-                                    {{
-                                        new Date(selectedDateGroup.date).toLocaleDateString('en-US', {
-                                            weekday: 'short',
-                                            year: 'numeric',
-                                            month: 'long',
-                                            day: 'numeric',
-                                        })
-                                    }}
+                                    {{ formatDateGroupDate(selectedDateGroup.date) }}
                                 </h2>
                             </div>
                             <div class="flex items-center justify-between gap-2 sm:justify-normal">
@@ -1859,9 +1903,18 @@ onUnmounted(() => {
                                         >
                                             {{ match.team1.won ? 'Winner' : 'Team A' }}
                                         </p>
-                                        <p class="text-sm font-black capitalize text-slate-900 dark:text-white">
-                                            {{ match.team1.players.join(' & ') }}
-                                        </p>
+                                        <div class="flex flex-wrap items-center justify-center gap-1 text-sm font-black capitalize text-slate-900 dark:text-white">
+                                            <template v-for="(pName, pIdx) in match.team1.players" :key="pIdx">
+                                                <button
+                                                    type="button"
+                                                    @click="handlePlayerClick(match.team1.player_ids?.[pIdx] || pName)"
+                                                    class="hover:underline hover:text-indigo-600 dark:hover:text-green-400 transition-colors"
+                                                >
+                                                    {{ pName }}
+                                                </button>
+                                                <span v-if="pIdx < match.team1.players.length - 1" class="text-slate-400 font-normal">&amp;</span>
+                                            </template>
+                                        </div>
                                         <p
                                             class="mt-1 text-lg font-black"
                                             :class="match.team1.won ? 'text-blue-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'"
@@ -1890,9 +1943,18 @@ onUnmounted(() => {
                                         >
                                             {{ match.team2.won ? 'Winner' : 'Team B' }}
                                         </p>
-                                        <p class="text-sm font-black capitalize text-slate-900 dark:text-white">
-                                            {{ match.team2.players.join(' & ') }}
-                                        </p>
+                                        <div class="flex flex-wrap items-center justify-center gap-1 text-sm font-black capitalize text-slate-900 dark:text-white">
+                                            <template v-for="(pName, pIdx) in match.team2.players" :key="pIdx">
+                                                <button
+                                                    type="button"
+                                                    @click="handlePlayerClick(match.team2.player_ids?.[pIdx] || pName)"
+                                                    class="hover:underline hover:text-indigo-600 dark:hover:text-green-400 transition-colors"
+                                                >
+                                                    {{ pName }}
+                                                </button>
+                                                <span v-if="pIdx < match.team2.players.length - 1" class="text-slate-400 font-normal">&amp;</span>
+                                            </template>
+                                        </div>
                                         <p
                                             class="mt-1 text-lg font-black"
                                             :class="match.team2.won ? 'text-blue-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'"
@@ -1944,14 +2006,7 @@ onUnmounted(() => {
                             <div class="rounded-xl bg-slate-50 dark:bg-[#1a1a1a]/55 p-3 text-center border border-slate-100 dark:border-[#2a2a2a]/55">
                                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Date Standings</p>
                                 <p class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                    {{
-                                        new Date(selectedDateGroup.date).toLocaleDateString('en-US', {
-                                            weekday: 'short',
-                                            year: 'numeric',
-                                            month: 'long',
-                                            day: 'numeric',
-                                        })
-                                    }}
+                                    {{ formatDateGroupDate(selectedDateGroup.date) }}
                                 </p>
                             </div>
 
@@ -1960,7 +2015,8 @@ onUnmounted(() => {
                                 <div
                                     v-for="player in topPlayersInDateMatches"
                                     :key="player.id"
-                                    class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+                                    @click="handlePlayerClick(player)"
+                                    class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:border-indigo-300 dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:hover:border-green-800/60"
                                 >
                                     <!-- Overall standing rank badges -->
                                     <div class="flex w-9 flex-shrink-0 justify-center">
@@ -1994,7 +2050,7 @@ onUnmounted(() => {
                                         <div class="min-w-0">
                                             <p class="truncate text-xs font-black capitalize text-slate-900 dark:text-white">{{ displayPlayerName(player) }}</p>
                                             <div class="mt-0.5 flex items-center gap-1.5">
-                                                <span class="text-[9px] font-semibold text-slate-500">{{ getMatchesCountForDate(displayPlayerName(player)) }} matches today</span>
+                                                <span class="text-[9px] font-semibold text-slate-500">{{ getMatchesCountForDate(player) }} matches today</span>
                                                 <span class="text-[9px] text-slate-300">•</span>
                                                 <span
                                                     class="text-[9px] font-black"

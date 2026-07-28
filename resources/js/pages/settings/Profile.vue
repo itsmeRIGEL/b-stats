@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { AlertCircle, BadgeCheck, Camera, ChartColumn, Eye, EyeOff, Globe, ImagePlus, Link2, Mail, Percent, Trophy, UserRound, X } from 'lucide-vue-next';
+import { AlertCircle, BadgeCheck, Camera, ChartColumn, ChevronDown, ChevronUp, Eye, EyeOff, Globe, ImagePlus, Link2, Mail, MapPin, Percent, Trophy, UserRound, X } from 'lucide-vue-next';
 import { TransitionRoot } from '@headlessui/vue';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -128,6 +128,7 @@ const displayName = computed(() => {
 const displayHandle = computed(() => user.value.username || '@player');
 const avatarInitial = computed(() => (displayName.value || 'P').trim().charAt(0).toUpperCase());
 const isMember = computed(() => Boolean(props.playerProfile?.is_member));
+const isVenueListExpanded = ref(false);
 const emailVerified = computed(() => Boolean(user.value.email_verified_at));
 const canResendVerification = computed(() => !emailVerified.value);
 const allTimeStatsVisibleFields = ref<string[]>(props.allTimeStatsVisibleFields ?? []);
@@ -437,29 +438,74 @@ const updatePassword = () => {
                                 </div>
                             </div>
 
-                            <div class="w-full rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-left dark:border-white/10 dark:bg-white/5">
-                                <div class="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-muted-foreground">
-                                    <Trophy class="h-4 w-4" />
-                                    Venue played
+                            <div class="w-full rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-left dark:border-white/10 dark:bg-white/5 transition-all">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                        <Trophy class="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                                        <span>Venue history</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        @click="isVenueListExpanded = !isVenueListExpanded"
+                                        class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15 cursor-pointer"
+                                    >
+                                        <span>{{ isVenueListExpanded ? 'Hide' : 'View' }}</span>
+                                        <component :is="isVenueListExpanded ? ChevronUp : ChevronDown" class="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                                    </button>
                                 </div>
-                                <div class="mt-3 grid gap-2 text-sm">
+
+                                <div class="mt-3 grid gap-2.5 text-sm">
                                     <div class="flex items-center justify-between">
                                         <span class="text-slate-500 dark:text-muted-foreground">Stats venue</span>
-                                        <span class="font-medium text-slate-900 dark:text-slate-100">{{ statsVenueName }}</span>
+                                        <span class="font-bold text-slate-900 dark:text-slate-100">{{ statsVenueName }}</span>
                                     </div>
                                     <div class="flex items-center justify-between">
                                         <span class="text-slate-500 dark:text-muted-foreground">Played venues</span>
-                                        <span class="font-medium text-slate-900 dark:text-slate-100">{{ playedVenues.length }}</span>
-                                    </div>
-                                    <div class="flex items-start justify-between gap-4">
-                                        <span class="text-slate-500 dark:text-muted-foreground">Venue list</span>
-                                        <span class="max-w-[65%] text-right font-medium text-slate-900 dark:text-slate-100">
-                                            {{ playedVenues.length ? playedVenues.map((venue) => venue.name).join(', ') : 'No venue history yet' }}
+                                        <span class="inline-flex items-center justify-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                                            {{ playedVenues.length }} {{ playedVenues.length === 1 ? 'venue' : 'venues' }}
                                         </span>
                                     </div>
                                     <div class="flex items-center justify-between">
                                         <span class="text-slate-500 dark:text-muted-foreground">Membership</span>
-                                        <span class="font-medium text-slate-900 dark:text-slate-100">{{ isMember ? 'Active' : 'None' }}</span>
+                                        <span
+                                            class="inline-flex items-center gap-1 text-xs font-bold"
+                                            :class="isMember ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
+                                        >
+                                            {{ isMember ? '👑 Active Member' : '👤 Non-member' }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Arrow Toggle Expandable List -->
+                                <div v-if="isVenueListExpanded" class="mt-3.5 border-t border-slate-200/80 pt-3 dark:border-white/10 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Played Venues List</span>
+                                        <span class="text-[10px] font-bold text-slate-400">{{ playedVenues.length }} total</span>
+                                    </div>
+
+                                    <div v-if="playedVenues.length === 0" class="py-2 text-center text-xs italic text-slate-400">
+                                        No venue history recorded yet.
+                                    </div>
+
+                                    <div v-else class="space-y-1.5">
+                                        <div
+                                            v-for="venue in playedVenues"
+                                            :key="venue.id"
+                                            class="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm transition hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/20"
+                                        >
+                                            <div class="flex items-center gap-2 min-w-0">
+                                                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                                                    <MapPin class="h-3.5 w-3.5" />
+                                                </div>
+                                                <span class="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{{ venue.name }}</span>
+                                            </div>
+                                            <span
+                                                class="ml-2 shrink-0 rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider"
+                                                :class="venue.name === statsVenueName ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-400'"
+                                            >
+                                                {{ venue.name === statsVenueName ? 'Primary' : 'Visited' }}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

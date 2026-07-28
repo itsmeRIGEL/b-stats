@@ -1607,13 +1607,19 @@ class PickleballController extends Controller
                     'booking_time' => $match->booking ? date('g:i A', strtotime($match->booking->start_time)) . ' - ' . date('g:i A', strtotime($match->booking->end_time)) : null,
                     'booking_lead' => $match->booking?->lead_name,
                     'team1' => [
-                        'players' => array_filter([$match->player1?->name, $match->player3?->name]),
+                        'players' => array_values(array_filter([
+                            $match->player1?->user?->username ?? $match->player1?->name,
+                            $match->player3?->user?->username ?? $match->player3?->name,
+                        ])),
                         'player_ids' => array_values(array_filter([$match->player_1_id, $match->player_3_id])),
                         'score' => $team1Score,
                         'won' => $team1Won,
                     ],
                     'team2' => [
-                        'players' => array_filter([$match->player2?->name, $match->player4?->name]),
+                        'players' => array_values(array_filter([
+                            $match->player2?->user?->username ?? $match->player2?->name,
+                            $match->player4?->user?->username ?? $match->player4?->name,
+                        ])),
                         'player_ids' => array_values(array_filter([$match->player_2_id, $match->player_4_id])),
                         'score' => $team2Score,
                         'won' => !$team1Won,

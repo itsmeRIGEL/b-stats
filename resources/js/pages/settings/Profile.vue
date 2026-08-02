@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { AlertCircle, BadgeCheck, Camera, ChartColumn, ChevronDown, ChevronUp, Eye, EyeOff, Globe, ImagePlus, Link2, Mail, MapPin, Percent, Trophy, UserRound, X } from 'lucide-vue-next';
@@ -142,6 +142,9 @@ const allTimeStatsVisibilityOptions = [
     'username',
     'birthday',
     'address',
+    'facebook_url',
+    'instagram_url',
+    'website_url',
 ] as const;
 const genderOptions = [
     { value: 'male', label: 'Male' },
@@ -895,14 +898,26 @@ const updatePassword = () => {
                                         :key="item.label"
                                         class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/60"
                                     >
-                                        <div class="flex items-center gap-3">
-                                            <div class="rounded-xl bg-white p-2 text-slate-700 shadow-sm dark:bg-white/5 dark:text-slate-200">
-                                                <component :is="item.icon" class="h-4 w-4" />
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div class="flex items-center gap-3 min-w-0 flex-1">
+                                                <div class="rounded-xl bg-white p-2 text-slate-700 shadow-sm dark:bg-white/5 dark:text-slate-200">
+                                                    <component :is="item.icon" class="h-4 w-4" />
+                                                </div>
+                                                <div class="min-w-0 flex-1">
+                                                    <p class="font-medium">{{ item.label }}</p>
+                                                    <p class="text-xs text-slate-500 dark:text-muted-foreground">{{ item.description }}</p>
+                                                </div>
                                             </div>
-                                            <div class="min-w-0 flex-1">
-                                                <p class="font-medium">{{ item.label }}</p>
-                                                <p class="text-xs text-slate-500 dark:text-muted-foreground">{{ item.description }}</p>
-                                            </div>
+                                            <button
+                                                type="button"
+                                                :disabled="visibilitySavingField === item.field"
+                                                class="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-slate-100 shrink-0"
+                                                :title="isAllTimeStatsFieldVisible(item.field) ? 'Visible in All-Time Stats' : 'Hidden from All-Time Stats'"
+                                                @click="toggleAllTimeStatsFieldVisibility(item.field)"
+                                            >
+                                                <Eye v-if="isAllTimeStatsFieldVisible(item.field)" class="h-4 w-4 text-emerald-500" />
+                                                <EyeOff v-else class="h-4 w-4 text-slate-400" />
+                                            </button>
                                         </div>
 
                                         <div v-if="isEditing" class="mt-4 space-y-2">

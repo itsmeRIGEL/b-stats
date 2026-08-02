@@ -17,6 +17,9 @@ import {
     User,
     X,
     MapPin,
+    Facebook,
+    Globe,
+    Instagram,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
@@ -449,6 +452,41 @@ const selectedPlayerInformationRows = computed(() => {
     });
 });
 
+const selectedPlayerSocialLinks = computed(() => {
+    const player = selectedPlayer.value;
+    if (!player) return [];
+
+    const profile = player.profile_details ?? {};
+    const links: Array<{ platform: string; label: string; icon: any; url: string }> = [];
+
+    if (profile.facebook_url) {
+        links.push({
+            platform: 'facebook',
+            label: 'Facebook',
+            icon: Facebook,
+            url: profile.facebook_url,
+        });
+    }
+    if (profile.instagram_url) {
+        links.push({
+            platform: 'instagram',
+            label: 'Instagram',
+            icon: Instagram,
+            url: profile.instagram_url,
+        });
+    }
+    if (profile.website_url) {
+        links.push({
+            platform: 'website',
+            label: 'Website',
+            icon: Globe,
+            url: profile.website_url,
+        });
+    }
+
+    return links;
+});
+
 const selectedPlayerStatusRows = computed(() => {
     const player = selectedPlayer.value;
     if (!player) return [];
@@ -459,7 +497,7 @@ const selectedPlayerStatusRows = computed(() => {
     ].filter((item) => item.value && item.value !== 'Not provided');
 });
 
-const hasSelectedPlayerCombinedDetails = computed(() => selectedPlayerInformationRows.value.length > 0 || selectedPlayerStatusRows.value.length > 0);
+const hasSelectedPlayerCombinedDetails = computed(() => selectedPlayerInformationRows.value.length > 0 || selectedPlayerSocialLinks.value.length > 0 || selectedPlayerStatusRows.value.length > 0);
 
 watch(
     selectedPlayer,
@@ -1684,20 +1722,40 @@ onUnmounted(() => {
                                         <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Information</span>: Visible profile and contact details.
                                     </p>
                                 </div>
-                                <div v-if="selectedPlayerInformationRows.length === 0" class="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-[#1a1a1a] dark:text-slate-400">
+                                <div v-if="selectedPlayerInformationRows.length === 0 && selectedPlayerSocialLinks.length === 0" class="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-[#1a1a1a] dark:text-slate-400">
                                     No profile details are visible for this player.
                                 </div>
-                                <div v-else class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                                    <div
-                                        v-for="item in selectedPlayerInformationRows"
-                                        :key="item.label"
-                                        class="min-w-0 pb-3"
-                                        :class="item.fullWidth ? 'sm:col-span-2 md:col-span-3 lg:col-span-4' : ''"
-                                    >
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">{{ item.label }}</p>
-                                        <p class="mt-2 text-base font-bold text-slate-900 dark:text-white" :class="item.breakWords ? 'break-words' : ''">
-                                            {{ item.value }}
-                                        </p>
+                                <div v-else class="space-y-4">
+                                    <div v-if="selectedPlayerInformationRows.length > 0" class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                                        <div
+                                            v-for="item in selectedPlayerInformationRows"
+                                            :key="item.label"
+                                            class="min-w-0 pb-1"
+                                            :class="item.fullWidth ? 'sm:col-span-2 md:col-span-3 lg:col-span-4' : ''"
+                                        >
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">{{ item.label }}</p>
+                                            <p class="mt-2 text-base font-bold text-slate-900 dark:text-white" :class="item.breakWords ? 'break-words' : ''">
+                                                {{ item.value }}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="selectedPlayerSocialLinks.length > 0" :class="selectedPlayerInformationRows.length > 0 ? 'border-t border-slate-200 pt-3 dark:border-[#1a1a1a]' : ''">
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Social Links</p>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <a
+                                                v-for="link in selectedPlayerSocialLinks"
+                                                :key="link.platform"
+                                                :href="link.url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                :title="link.label"
+                                                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:scale-105 hover:bg-slate-100 hover:text-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/15 dark:hover:text-blue-400"
+                                            >
+                                                <component :is="link.icon" class="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+                                                <span class="text-xs font-bold">{{ link.label }}</span>
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

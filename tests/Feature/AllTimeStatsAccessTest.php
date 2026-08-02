@@ -133,4 +133,52 @@ class AllTimeStatsAccessTest extends TestCase
             ->where('venueLabel', $scheduler->currentVenue()?->name)
         );
     }
+
+    public function test_all_time_stats_includes_social_links_when_visible()
+    {
+        $scheduler = $this->createSchedulerWithVenue('scheduler2@example.com');
+        $user = User::factory()->create([
+            'username' => 'socialplayer',
+            'facebook_url' => 'https://facebook.com/socialplayer',
+            'instagram_url' => 'https://instagram.com/socialplayer',
+            'all_time_stats_visible_fields' => ['username', 'facebook_url'],
+        ]);
+
+        $player = Player::create([
+            'user_id' => $user->id,
+            'name' => 'Social Player',
+            'show_in_roster' => true,
+            'venue_id' => $scheduler->venue_id,
+        ]);
+
+        $opponent = Player::create([
+            'user_id' => User::factory()->create()->id,
+            'name' => 'Opponent Player',
+            'show_in_roster' => true,
+            'venue_id' => $scheduler->venue_id,
+        ]);
+
+        GameMatch::create([
+            'player_1_id' => $player->id,
+            'player_2_id' => $opponent->id,
+            'player_1_score' => 11,
+            'player_2_score' => 5,
+            'match_date' => now()->toDateString(),
+            'loss_points' => 5,
+            'is_tallied' => true,
+            'is_walkin' => true,
+            'venue_id' => $scheduler->venue_id,
+        ]);
+
+        $this->actingAs($scheduler);
+
+        $response = $this->get(route('all-time-stats'));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('AllTimeStats')
+            ->where('players.0.profile_details.facebook_url', 'https://facebook.com/socialplayer')
+            ->where('players.0.profile_details.instagram_url', null)
+        );
+    }
 }

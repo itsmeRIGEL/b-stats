@@ -30,7 +30,10 @@ class ProfileController extends Controller
         'username',
         'birthday',
         'address',
-     ];
+        'facebook_url',
+        'instagram_url',
+        'website_url',
+    ];
 
     private function allTimeStatsVisibleFields(?User $user): array
     {

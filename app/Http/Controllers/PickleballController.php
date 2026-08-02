@@ -1554,20 +1554,55 @@ class PickleballController extends Controller
                 $profileDetails = [
                     'username' => null,
                     'first_name' => null,
+                    'middle_name' => null,
                     'last_name' => null,
+                    'suffix' => null,
+                    'gender' => null,
+                    'facebook_url' => null,
+                    'instagram_url' => null,
+                    'website_url' => null,
+                ];
+                $contactDetails = [
+                    'birthday' => null,
+                    'address' => null,
                 ];
                 if ($user) {
                     $availableSections[] = 'profile';
                     $availableSections[] = 'membership';
-                    $visibleFields = $user->all_time_stats_visible_fields ?? [];
+                    $allFields = ['first_name', 'middle_name', 'last_name', 'suffix', 'gender', 'username', 'birthday', 'address', 'facebook_url', 'instagram_url', 'website_url'];
+                    $visibleFields = $user->all_time_stats_visible_fields !== null ? $user->all_time_stats_visible_fields : $allFields;
                     if (in_array('username', $visibleFields, true)) {
                         $profileDetails['username'] = $user->username;
                     }
                     if (in_array('first_name', $visibleFields, true)) {
                         $profileDetails['first_name'] = $user->first_name;
                     }
+                    if (in_array('middle_name', $visibleFields, true)) {
+                        $profileDetails['middle_name'] = $user->middle_name;
+                    }
                     if (in_array('last_name', $visibleFields, true)) {
                         $profileDetails['last_name'] = $user->last_name;
+                    }
+                    if (in_array('suffix', $visibleFields, true)) {
+                        $profileDetails['suffix'] = $user->suffix;
+                    }
+                    if (in_array('gender', $visibleFields, true)) {
+                        $profileDetails['gender'] = $user->gender;
+                    }
+                    if (in_array('facebook_url', $visibleFields, true)) {
+                        $profileDetails['facebook_url'] = $user->facebook_url;
+                    }
+                    if (in_array('instagram_url', $visibleFields, true)) {
+                        $profileDetails['instagram_url'] = $user->instagram_url;
+                    }
+                    if (in_array('website_url', $visibleFields, true)) {
+                        $profileDetails['website_url'] = $user->website_url;
+                    }
+                    if (in_array('birthday', $visibleFields, true)) {
+                        $contactDetails['birthday'] = $user->birthday;
+                    }
+                    if (in_array('address', $visibleFields, true)) {
+                        $contactDetails['address'] = $user->address;
                     }
                 }
 
@@ -1581,6 +1616,7 @@ class PickleballController extends Controller
                     'points' => $points,
                     'available_sections' => $availableSections,
                     'profile_details' => $profileDetails,
+                    'contact_details' => $contactDetails,
                 ];
             })->filter(fn($p) => $p['total_matches'] > 0)->values();
         };

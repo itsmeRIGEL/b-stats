@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import {
     BarChart3,
     Calendar,
@@ -72,11 +72,33 @@ const leaderboardGroups = computed<LeaderboardGroup[]>(() =>
 );
 const activeLeaderboardGroupKey = ref<string>(props.defaultLeaderboardGroupKey ?? leaderboardGroups.value[0]?.key ?? 'default');
 
-const presets = [
-    { key: 'overview' as const, label: 'Overview', icon: BarChart3 },
-    { key: 'leaderboard' as const, label: 'Leaderboard', icon: Trophy },
-    { key: 'history' as const, label: 'Match History', icon: History },
-];
+const page = usePage();
+const isSchedulerUser = computed(() => {
+    const user = (page.props as any).auth?.user;
+    if (!user) return false;
+    return user.role === 'scheduler' || user.role === 'scheduler_scorer' || !!user.is_scheduler;
+});
+
+const presets = computed(() => {
+    const list = [
+        { key: 'overview' as const, label: 'Overview', icon: BarChart3 },
+        { key: 'leaderboard' as const, label: 'Leaderboard', icon: Trophy },
+    ];
+    if (!isSchedulerUser.value) {
+        list.push({ key: 'history' as const, label: 'Match History', icon: History });
+    }
+    return list;
+});
+
+watch(
+    isSchedulerUser,
+    (sched) => {
+        if (sched && activePreset.value === 'history') {
+            activePreset.value = 'leaderboard';
+        }
+    },
+    { immediate: true },
+);
 
 // Match History
 const historySearch = ref('');
@@ -457,6 +479,22 @@ const selectedPlayerSocialLinks = computed(() => {
     if (!player) return [];
 
     const profile = player.profile_details ?? {};
+    if (profile.social_links && Array.isArray(profile.social_links) && profile.social_links.length > 0) {
+        return profile.social_links.slice(0, 3).filter((l: any) => l && l.url).map((item: any) => {
+            const platformName = item.platform || 'website';
+            let icon = Globe;
+            if (platformName === 'instagram') icon = Instagram;
+            else if (platformName === 'facebook') icon = Facebook;
+
+            return {
+                platform: platformName,
+                label: platformName.charAt(0).toUpperCase() + platformName.slice(1),
+                icon,
+                url: item.url,
+            };
+        });
+    }
+
     const links: Array<{ platform: string; label: string; icon: any; url: string }> = [];
 
     if (profile.facebook_url) {
@@ -484,7 +522,7 @@ const selectedPlayerSocialLinks = computed(() => {
         });
     }
 
-    return links;
+    return links.slice(0, 3);
 });
 
 const selectedPlayerStatusRows = computed(() => {

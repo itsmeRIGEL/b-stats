@@ -83,13 +83,11 @@ class TournamentSubFolderController extends Controller
                     ->exists()
                 : false;
 
-            $ownsManagedTournament = method_exists($record, 'tournaments')
-                ? $record->tournaments()->where('manager_user_id', $user->id)->exists()
-                : false;
-
-            if ($ownsApprovedDay || $ownsManagedTournament) {
+            if ($ownsApprovedDay) {
                 return;
             }
+
+            abort(403, 'Access denied. Your request for this tournament workspace is not approved.');
         }
 
         $venueId = $this->activeVenueId();
@@ -114,7 +112,6 @@ class TournamentSubFolderController extends Controller
                     ->where('status', 'approved')
                     ->exists();
 
-                $ownsManagedTournament = $day->tournaments()->where('manager_user_id', $user->id)->exists();
                 $hasForeignTournament = $day->tournaments()
                     ->where(function ($query) use ($user) {
                         $query->whereNull('manager_user_id')
@@ -122,7 +119,7 @@ class TournamentSubFolderController extends Controller
                     })
                     ->exists();
 
-                if ((!$ownsApprovedDay && !$ownsManagedTournament) || $hasForeignTournament) {
+                if (!$ownsApprovedDay || $hasForeignTournament) {
                     abort(403, 'Access denied.');
                 }
 

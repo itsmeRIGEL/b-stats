@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { AlertCircle, BadgeCheck, Camera, ChartColumn, ChevronDown, ChevronUp, Eye, EyeOff, Globe, ImagePlus, Link2, Mail, MapPin, Percent, Trophy, UserRound, X } from 'lucide-vue-next';
+import { AlertCircle, BadgeCheck, Camera, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, EyeOff, Globe, ImagePlus, Link2, Mail, MapPin, Percent, Plus, Trash2, Trophy, UserRound, X } from 'lucide-vue-next';
 import { TransitionRoot } from '@headlessui/vue';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -39,12 +39,25 @@ interface ProfileStats {
     win_rate: number;
 }
 
+interface PlayedVenue {
+    id: number;
+    name: string;
+    wins?: number;
+    losses?: number;
+    matches_count?: number;
+    points?: number;
+    win_rate?: number;
+    is_primary?: boolean;
+    is_member?: boolean;
+    membership_expires_at?: string | null;
+}
+
 interface Props {
     mustVerifyEmail: boolean;
     status?: string;
     playerProfile?: PlayerProfile | null;
     profileStats?: ProfileStats;
-    playedVenues?: Array<{ id: number; name: string }>;
+    playedVenues?: PlayedVenue[];
     allTimeStatsVisibleFields?: string[];
 }
 
@@ -71,6 +84,22 @@ const playerStats = computed(() => ({
     win_rate: props.profileStats?.win_rate ?? props.playerProfile?.win_rate ?? 0,
 }));
 
+interface SocialLinkItem {
+    platform: string;
+    url: string;
+}
+
+const getInitialSocialLinks = (): SocialLinkItem[] => {
+    if (user.value.social_links && Array.isArray(user.value.social_links) && user.value.social_links.length > 0) {
+        return user.value.social_links.slice(0, 3).map((item) => ({ platform: item.platform || 'website', url: item.url || '' }));
+    }
+    const legacy: SocialLinkItem[] = [];
+    if (user.value.facebook_url) legacy.push({ platform: 'facebook', url: user.value.facebook_url });
+    if (user.value.instagram_url) legacy.push({ platform: 'instagram', url: user.value.instagram_url });
+    if (user.value.website_url) legacy.push({ platform: 'website', url: user.value.website_url });
+    return legacy.slice(0, 3);
+};
+
 const form = useForm({
     first_name: user.value.first_name || '',
     middle_name: user.value.middle_name || '',
@@ -83,6 +112,7 @@ const form = useForm({
     facebook_url: user.value.facebook_url || '',
     instagram_url: user.value.instagram_url || '',
     website_url: user.value.website_url || '',
+    social_links: getInitialSocialLinks(),
     phone: props.playerProfile?.phone || '',
     birthday: props.playerProfile?.birthday || '',
     address: props.playerProfile?.address || '',
@@ -127,8 +157,35 @@ const displayName = computed(() => {
 
 const displayHandle = computed(() => user.value.username || '@player');
 const avatarInitial = computed(() => (displayName.value || 'P').trim().charAt(0).toUpperCase());
-const isMember = computed(() => Boolean(props.playerProfile?.is_member));
-const isVenueListExpanded = ref(false);
+const playedVenuesList = computed(() => props.playedVenues ?? []);
+const activeVenueIndex = ref(0);
+const isVenueHistoryExpanded = ref(true);
+
+const currentPlayedVenue = computed(() => {
+    const list = playedVenuesList.value;
+    if (list.length === 0) return null;
+    return list[activeVenueIndex.value] ?? list[0];
+});
+
+const nextVenue = () => {
+    const list = playedVenuesList.value;
+    if (list.length <= 1) return;
+    activeVenueIndex.value = (activeVenueIndex.value + 1) % list.length;
+};
+
+const prevVenue = () => {
+    const list = playedVenuesList.value;
+    if (list.length <= 1) return;
+    activeVenueIndex.value = (activeVenueIndex.value - 1 + list.length) % list.length;
+};
+
+watch(playedVenuesList, (list) => {
+    if (list.length > 0) {
+        const primaryIdx = list.findIndex((v) => v.is_primary || v.name === statsVenueName.value);
+        activeVenueIndex.value = primaryIdx !== -1 ? primaryIdx : 0;
+    }
+}, { immediate: true });
+
 const emailVerified = computed(() => Boolean(user.value.email_verified_at));
 const canResendVerification = computed(() => !emailVerified.value);
 const allTimeStatsVisibleFields = ref<string[]>(props.allTimeStatsVisibleFields ?? []);
@@ -177,11 +234,41 @@ const displayGender = computed(() => {
     return selected?.label ?? 'Not provided';
 });
 
-const socialLinks = [
-    { label: 'Facebook', icon: Globe, description: 'Public page link', field: 'facebook_url' as const, placeholder: 'https://facebook.com/yourname' },
-    { label: 'Instagram', icon: ImagePlus, description: 'Photo sharing profile', field: 'instagram_url' as const, placeholder: 'https://instagram.com/yourname' },
-    { label: 'Website', icon: Link2, description: 'Personal or club page', field: 'website_url' as const, placeholder: 'https://yourdomain.com' },
-];
+const socialPlatforms = [
+    { value: 'facebook', label: 'Facebook', icon: Globe, description: 'Public page link', placeholder: 'https://facebook.com/yourname', field: 'facebook_url' as const },
+    { value: 'instagram', label: 'Instagram', icon: ImagePlus, description: 'Photo sharing profile', placeholder: 'https://instagram.com/yourname', field: 'instagram_url' as const },
+    { value: 'twitter', label: 'X / Twitter', icon: Link2, description: 'Social feed link', placeholder: 'https://x.com/yourname', field: 'website_url' as const },
+    { value: 'youtube', label: 'YouTube', icon: Camera, description: 'Video highlights link', placeholder: 'https://youtube.com/@channel', field: 'website_url' as const },
+    { value: 'tiktok', label: 'TikTok', icon: Camera, description: 'Short videos link', placeholder: 'https://tiktok.com/@yourname', field: 'website_url' as const },
+    { value: 'linkedin', label: 'LinkedIn', icon: UserRound, description: 'Professional profile link', placeholder: 'https://linkedin.com/in/yourname', field: 'website_url' as const },
+    { value: 'discord', label: 'Discord', icon: Mail, description: 'Community server link', placeholder: 'https://discord.gg/yourserver', field: 'website_url' as const },
+    { value: 'website', label: 'Personal Website', icon: Link2, description: 'Personal or club page', placeholder: 'https://yourdomain.com', field: 'website_url' as const },
+] as const;
+
+const getPlatformMeta = (platformValue: string) => {
+    return socialPlatforms.find((p) => p.value === platformValue) ?? {
+        value: platformValue,
+        label: platformValue ? platformValue.charAt(0).toUpperCase() + platformValue.slice(1) : 'Website',
+        icon: Link2,
+        description: 'Profile link',
+        placeholder: 'https://...',
+        field: 'website_url' as const,
+    };
+};
+
+const addSocialLink = () => {
+    if (form.social_links.length >= 3) return;
+    const used = new Set(form.social_links.map((s) => s.platform));
+    const available = socialPlatforms.find((p) => !used.has(p.value));
+    form.social_links.push({
+        platform: available ? available.value : 'website',
+        url: '',
+    });
+};
+
+const removeSocialLink = (index: number) => {
+    form.social_links.splice(index, 1);
+};
 
 const isAllTimeStatsFieldVisible = (field: string) => allTimeStatsVisibleFields.value.includes(field);
 
@@ -229,6 +316,7 @@ const syncFormFromProps = () => {
     form.facebook_url = user.value.facebook_url || '';
     form.instagram_url = user.value.instagram_url || '';
     form.website_url = user.value.website_url || '';
+    form.social_links = getInitialSocialLinks();
     form.phone = props.playerProfile?.phone || '';
     form.birthday = props.playerProfile?.birthday || '';
     form.address = props.playerProfile?.address || '';
@@ -442,72 +530,99 @@ const updatePassword = () => {
                             </div>
 
                             <div class="w-full rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-left dark:border-white/10 dark:bg-white/5 transition-all">
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                                        <Trophy class="h-4 w-4 text-amber-500 dark:text-amber-400" />
-                                        <span>Venue history</span>
+                                <div
+                                    @click="isVenueHistoryExpanded = !isVenueHistoryExpanded"
+                                    class="-m-1.5 p-1.5 rounded-xl flex items-center justify-between cursor-pointer select-none group transition-all hover:bg-slate-200/50 dark:hover:bg-white/10"
+                                >
+                                    <div class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                                        <Trophy class="h-4 w-4 text-amber-500 dark:text-amber-400 group-hover:scale-110 transition-transform duration-200" />
+                                        <span class="group-hover:translate-x-0.5 transition-transform duration-200">Venue history</span>
+                                        <component
+                                            :is="isVenueHistoryExpanded ? ChevronUp : ChevronDown"
+                                            class="h-4 w-4 text-slate-400 transition-all duration-200 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-hover:scale-125"
+                                        />
                                     </div>
-                                    <button
-                                        type="button"
-                                        @click="isVenueListExpanded = !isVenueListExpanded"
-                                        class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15 cursor-pointer"
-                                    >
-                                        <span>{{ isVenueListExpanded ? 'Hide' : 'View' }}</span>
-                                        <component :is="isVenueListExpanded ? ChevronUp : ChevronDown" class="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-                                    </button>
-                                </div>
 
-                                <div class="mt-3 grid gap-2.5 text-sm">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-slate-500 dark:text-muted-foreground">Stats venue</span>
-                                        <span class="font-bold text-slate-900 dark:text-slate-100">{{ statsVenueName }}</span>
-                                    </div>
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-slate-500 dark:text-muted-foreground">Played venues</span>
-                                        <span class="inline-flex items-center justify-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
-                                            {{ playedVenues.length }} {{ playedVenues.length === 1 ? 'venue' : 'venues' }}
+                                    <!-- 1-by-1 Arrow Toggle Pager -->
+                                    <div v-if="isVenueHistoryExpanded && playedVenuesList.length > 0" class="flex items-center gap-1.5" @click.stop>
+                                        <span class="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                                            {{ activeVenueIndex + 1 }} of {{ playedVenuesList.length }}
                                         </span>
-                                    </div>
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-slate-500 dark:text-muted-foreground">Membership</span>
-                                        <span
-                                            class="inline-flex items-center gap-1 text-xs font-bold"
-                                            :class="isMember ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
+                                        <button
+                                            type="button"
+                                            :disabled="playedVenuesList.length <= 1"
+                                            @click="prevVenue"
+                                            class="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15 cursor-pointer"
+                                            title="Previous venue"
                                         >
-                                            {{ isMember ? '👑 Active Member' : '👤 Non-member' }}
-                                        </span>
+                                            <ChevronLeft class="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="playedVenuesList.length <= 1"
+                                            @click="nextVenue"
+                                            class="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15 cursor-pointer"
+                                            title="Next venue"
+                                        >
+                                            <ChevronRight class="h-4 w-4" />
+                                        </button>
                                     </div>
                                 </div>
 
-                                <!-- Arrow Toggle Expandable List -->
-                                <div v-if="isVenueListExpanded" class="mt-3.5 border-t border-slate-200/80 pt-3 dark:border-white/10 space-y-2">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Played Venues List</span>
-                                        <span class="text-[10px] font-bold text-slate-400">{{ playedVenues.length }} total</span>
-                                    </div>
-
-                                    <div v-if="playedVenues.length === 0" class="py-2 text-center text-xs italic text-slate-400">
+                                <div v-if="isVenueHistoryExpanded">
+                                    <!-- Empty State -->
+                                    <div v-if="!currentPlayedVenue" class="mt-3 py-2 text-center text-xs italic text-slate-400">
                                         No venue history recorded yet.
                                     </div>
 
-                                    <div v-else class="space-y-1.5">
-                                        <div
-                                            v-for="venue in playedVenues"
-                                            :key="venue.id"
-                                            class="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm transition hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/20"
-                                        >
+                                    <!-- Direct 1-by-1 Display with Individual Venue Stats -->
+                                    <div v-else class="mt-3 space-y-3 text-sm">
+                                        <div class="flex items-center justify-between border-b border-slate-200/60 pb-2 dark:border-white/10">
+                                            <span class="text-slate-500 dark:text-muted-foreground">Stats venue</span>
                                             <div class="flex items-center gap-2 min-w-0">
-                                                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
-                                                    <MapPin class="h-3.5 w-3.5" />
-                                                </div>
-                                                <span class="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{{ venue.name }}</span>
+                                                <span class="font-bold text-slate-900 dark:text-slate-100 truncate">{{ currentPlayedVenue.name }}</span>
+                                                <span
+                                                    class="shrink-0 rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider"
+                                                    :class="currentPlayedVenue.name === statsVenueName || currentPlayedVenue.is_primary ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-400'"
+                                                >
+                                                    {{ currentPlayedVenue.name === statsVenueName || currentPlayedVenue.is_primary ? 'Primary' : 'Visited' }}
+                                                </span>
                                             </div>
-                                            <span
-                                                class="ml-2 shrink-0 rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider"
-                                                :class="venue.name === statsVenueName ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-400'"
-                                            >
-                                                {{ venue.name === statsVenueName ? 'Primary' : 'Visited' }}
-                                            </span>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div class="rounded-xl border border-slate-200/80 bg-white p-2 text-center shadow-sm dark:border-white/10 dark:bg-white/5">
+                                                <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-muted-foreground">Wins</p>
+                                                <p class="text-base font-bold text-emerald-600 dark:text-emerald-400">{{ currentPlayedVenue.wins ?? 0 }}</p>
+                                            </div>
+                                            <div class="rounded-xl border border-slate-200/80 bg-white p-2 text-center shadow-sm dark:border-white/10 dark:bg-white/5">
+                                                <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-muted-foreground">Losses</p>
+                                                <p class="text-base font-bold text-rose-600 dark:text-rose-400">{{ currentPlayedVenue.losses ?? 0 }}</p>
+                                            </div>
+                                            <div class="rounded-xl border border-slate-200/80 bg-white p-2 text-center shadow-sm dark:border-white/10 dark:bg-white/5">
+                                                <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-muted-foreground">Total</p>
+                                                <p class="text-base font-bold text-slate-900 dark:text-slate-100">{{ currentPlayedVenue.matches_count ?? 0 }}</p>
+                                            </div>
+                                            <div class="rounded-xl border border-slate-200/80 bg-white p-2 text-center shadow-sm dark:border-white/10 dark:bg-white/5">
+                                                <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-muted-foreground">Points</p>
+                                                <p class="text-base font-bold text-amber-600 dark:text-amber-400">{{ currentPlayedVenue.points ?? 0 }}</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="space-y-2 pt-1">
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span class="text-slate-500 dark:text-muted-foreground">Venue Win Rate</span>
+                                                <span class="font-bold text-slate-900 dark:text-slate-100">{{ currentPlayedVenue.win_rate ?? 0 }}%</span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span class="text-slate-500 dark:text-muted-foreground">Membership</span>
+                                                <span
+                                                    class="inline-flex items-center gap-1 font-bold"
+                                                    :class="currentPlayedVenue.is_member ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
+                                                >
+                                                    {{ currentPlayedVenue.is_member ? '👑 Active Member' : '👤 Non-member' }}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -892,61 +1007,113 @@ const updatePassword = () => {
                                     </div>
                                 </div>
 
-                                <div class="mt-5 grid gap-3 sm:grid-cols-3">
-                                    <div
-                                        v-for="item in socialLinks"
-                                        :key="item.label"
-                                        class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/60"
-                                    >
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div class="flex items-center gap-3 min-w-0 flex-1">
-                                                <div class="rounded-xl bg-white p-2 text-slate-700 shadow-sm dark:bg-white/5 dark:text-slate-200">
-                                                    <component :is="item.icon" class="h-4 w-4" />
+                                <!-- View Mode: No links -->
+                                <div v-if="!isEditing && form.social_links.filter(l => l.url).length === 0" class="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-sm text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-muted-foreground">
+                                    No social links added yet. Click <span class="font-semibold text-slate-600 dark:text-slate-300">Edit information</span> above to add your profile links.
+                                </div>
+
+                                <!-- View Mode: Has links -->
+                                <div v-else-if="!isEditing" class="mt-5 grid gap-3 sm:grid-cols-3">
+                                    <template v-for="(item, idx) in form.social_links.filter(l => l.url)" :key="idx">
+                                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/60">
+                                            <div class="flex items-center justify-between gap-3">
+                                                <div class="flex items-center gap-3 min-w-0 flex-1">
+                                                    <div class="rounded-xl bg-white p-2 text-slate-700 shadow-sm dark:bg-white/5 dark:text-slate-200">
+                                                        <component :is="getPlatformMeta(item.platform).icon" class="h-4 w-4" />
+                                                    </div>
+                                                    <div class="min-w-0 flex-1">
+                                                        <p class="font-medium text-slate-900 dark:text-slate-100">{{ getPlatformMeta(item.platform).label }}</p>
+                                                        <p class="text-xs text-slate-500 dark:text-muted-foreground">{{ getPlatformMeta(item.platform).description }}</p>
+                                                    </div>
                                                 </div>
-                                                <div class="min-w-0 flex-1">
-                                                    <p class="font-medium">{{ item.label }}</p>
-                                                    <p class="text-xs text-slate-500 dark:text-muted-foreground">{{ item.description }}</p>
-                                                </div>
+                                                <button
+                                                    type="button"
+                                                    :disabled="visibilitySavingField === getPlatformMeta(item.platform).field"
+                                                    class="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-slate-100 shrink-0"
+                                                    :title="isAllTimeStatsFieldVisible(getPlatformMeta(item.platform).field) ? 'Visible in All-Time Stats' : 'Hidden from All-Time Stats'"
+                                                    @click="toggleAllTimeStatsFieldVisibility(getPlatformMeta(item.platform).field)"
+                                                >
+                                                    <Eye v-if="isAllTimeStatsFieldVisible(getPlatformMeta(item.platform).field)" class="h-4 w-4 text-emerald-500" />
+                                                    <EyeOff v-else class="h-4 w-4 text-slate-400" />
+                                                </button>
                                             </div>
-                                            <button
-                                                type="button"
-                                                :disabled="visibilitySavingField === item.field"
-                                                class="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-slate-100 shrink-0"
-                                                :title="isAllTimeStatsFieldVisible(item.field) ? 'Visible in All-Time Stats' : 'Hidden from All-Time Stats'"
-                                                @click="toggleAllTimeStatsFieldVisibility(item.field)"
-                                            >
-                                                <Eye v-if="isAllTimeStatsFieldVisible(item.field)" class="h-4 w-4 text-emerald-500" />
-                                                <EyeOff v-else class="h-4 w-4 text-slate-400" />
-                                            </button>
-                                        </div>
 
-                                        <div v-if="isEditing" class="mt-4 space-y-2">
-                                            <Label :for="item.field" class="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-muted-foreground">
-                                                {{ item.label }} URL
-                                            </Label>
-                                            <Input
-                                                :id="item.field"
-                                                v-model="form[item.field]"
-                                                type="url"
-                                                :placeholder="item.placeholder"
-                                                :disabled="!isEditing"
-                                            />
-                                            <InputError :message="form.errors[item.field]" />
-                                        </div>
-
-                                        <div v-else class="mt-4">
-                                            <template v-if="form[item.field]">
+                                            <div class="mt-4">
                                                 <a
-                                                    :href="form[item.field]"
+                                                    :href="item.url"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="break-all text-sm font-medium text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-500 dark:text-sky-400 dark:decoration-sky-700 dark:hover:text-sky-300"
                                                 >
-                                                    {{ form[item.field] }}
+                                                    {{ item.url }}
                                                 </a>
-                                            </template>
-                                            <p v-else class="text-sm text-slate-400 dark:text-muted-foreground">No link added yet.</p>
+                                            </div>
                                         </div>
+                                    </template>
+                                </div>
+
+                                <!-- Edit Mode: Dynamic 3-link editor -->
+                                <div v-else class="mt-5 space-y-4">
+                                    <div class="grid gap-3 sm:grid-cols-3">
+                                        <div
+                                            v-for="(item, index) in form.social_links"
+                                            :key="index"
+                                            class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/60 space-y-3"
+                                        >
+                                            <div class="flex items-center justify-between gap-2">
+                                                <div class="flex items-center gap-2 min-w-0">
+                                                    <div class="rounded-lg bg-white p-1.5 text-slate-700 shadow-sm dark:bg-white/5 dark:text-slate-200">
+                                                        <component :is="getPlatformMeta(item.platform).icon" class="h-4 w-4" />
+                                                    </div>
+                                                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Link #{{ index + 1 }}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    class="rounded-full p-1 text-red-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                                                    title="Remove link"
+                                                    @click="removeSocialLink(index)"
+                                                >
+                                                    <Trash2 class="h-4 w-4" />
+                                                </button>
+                                            </div>
+
+                                            <div class="space-y-1">
+                                                <Label class="text-xs text-slate-500">Platform</Label>
+                                                <select
+                                                    v-model="item.platform"
+                                                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                                >
+                                                    <option v-for="plat in socialPlatforms" :key="plat.value" :value="plat.value">
+                                                        {{ plat.label }}
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <div class="space-y-1">
+                                                <Label class="text-xs text-slate-500">URL</Label>
+                                                <Input
+                                                    v-model="item.url"
+                                                    type="url"
+                                                    :placeholder="getPlatformMeta(item.platform).placeholder"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-center justify-between pt-1">
+                                        <p class="text-xs text-slate-500 dark:text-muted-foreground">
+                                            You can add up to <span class="font-bold text-slate-700 dark:text-slate-300">3 social profile links</span> max.
+                                        </p>
+                                        <Button
+                                            v-if="form.social_links.length < 3"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            class="rounded-full border-dashed border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-white/20 dark:text-slate-200 dark:hover:bg-white/10"
+                                            @click="addSocialLink"
+                                        >
+                                            <Plus class="mr-1 h-3.5 w-3.5" /> Add social link ({{ form.social_links.length }}/3)
+                                        </Button>
                                     </div>
                                 </div>
                             </div>

@@ -52,7 +52,9 @@ Route::middleware(['auth', 'verified', 'venue'])->group(function () {
 
     Route::middleware('role:player')->group(function () {
         Route::get('venues', [TournamentRequestController::class, 'playerVenues'])->name('venues.index');
+        Route::get('player/venue-availability', [TournamentRequestController::class, 'venueAvailability'])->name('player.venue-availability');
         Route::post('tournament-requests', [TournamentRequestController::class, 'store'])->name('tournament-requests.store');
+        Route::post('player/set-primary-venue', [TournamentRequestController::class, 'setPrimaryVenue'])->name('player.set-primary-venue');
     });
 
     // ── Admin + Scheduler shared routes (Users Management) ───────────────────

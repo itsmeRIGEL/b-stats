@@ -560,6 +560,12 @@ class PickleballController extends Controller
                         $venueSync[$key] = $data[$key];
                     }
                 }
+                if (isset($venueSync['court_count'])) {
+                    $newCourtCount = (int) $venueSync['court_count'];
+                    if ($venue->covered_court_count && (int) $venue->covered_court_count > $newCourtCount) {
+                        $venueSync['covered_court_count'] = $newCourtCount;
+                    }
+                }
                 if (!empty($venueSync)) {
                     $venue->update($venueSync);
                 }
@@ -997,8 +1003,47 @@ class PickleballController extends Controller
     public function memberships()
     {
         $venueId = $this->activeVenueId();
+
+        $query = Player::with('user');
+
+        if ($venueId) {
+            $playedPlayerIds = GameMatch::where('venue_id', $venueId)
+                ->pluck('player_1_id')
+                ->merge(GameMatch::where('venue_id', $venueId)->pluck('player_2_id'))
+                ->filter()
+                ->unique()
+                ->all();
+
+            $paymentPlayerIds = MembershipPayment::where('venue_id', $venueId)->pluck('player_id')->filter()->unique()->all();
+
+            $bookedUserIds = Booking::where('venue_id', $venueId)->pluck('user_id')->filter()->all();
+
+            $bookingPlayerUserIds = \Illuminate\Support\Facades\DB::table('booking_player')
+                ->join('bookings', 'booking_player.booking_id', '=', 'bookings.id')
+                ->join('players', 'booking_player.player_id', '=', 'players.id')
+                ->where('bookings.venue_id', $venueId)
+                ->pluck('players.user_id')
+                ->filter()
+                ->all();
+
+            $requestUserIds = \App\Models\TournamentRequest::where('venue_id', $venueId)->pluck('user_id')->filter()->all();
+            $primaryVenueUserIds = User::where('venue_id', $venueId)->pluck('id')->filter()->all();
+
+            $relevantUserIds = array_values(array_unique(array_merge($bookedUserIds, $bookingPlayerUserIds, $requestUserIds, $primaryVenueUserIds)));
+
+            $query->where(function ($q) use ($venueId, $playedPlayerIds, $paymentPlayerIds, $relevantUserIds) {
+                $q->where('venue_id', $venueId)
+                  ->orWhereIn('id', $playedPlayerIds)
+                  ->orWhereIn('id', $paymentPlayerIds);
+
+                if (!empty($relevantUserIds)) {
+                    $q->orWhereIn('user_id', $relevantUserIds);
+                }
+            });
+        }
+
         return Inertia::render('Memberships', [
-            'players' => Player::with('user')->where('show_in_roster', true)->when($venueId, fn($q) => $q->where('venue_id', $venueId))->get(),
+            'players' => $query->get(),
             'settings' => $this->venueSettings(),
         ]);
     }
@@ -1561,6 +1606,7 @@ class PickleballController extends Controller
                     'facebook_url' => null,
                     'instagram_url' => null,
                     'website_url' => null,
+                    'social_links' => null,
                 ];
                 $contactDetails = [
                     'birthday' => null,
@@ -1569,7 +1615,7 @@ class PickleballController extends Controller
                 if ($user) {
                     $availableSections[] = 'profile';
                     $availableSections[] = 'membership';
-                    $allFields = ['first_name', 'middle_name', 'last_name', 'suffix', 'gender', 'username', 'birthday', 'address', 'facebook_url', 'instagram_url', 'website_url'];
+                    $allFields = ['first_name', 'middle_name', 'last_name', 'suffix', 'gender', 'username', 'birthday', 'address', 'facebook_url', 'instagram_url', 'website_url', 'social_links'];
                     $visibleFields = $user->all_time_stats_visible_fields !== null ? $user->all_time_stats_visible_fields : $allFields;
                     if (in_array('username', $visibleFields, true)) {
                         $profileDetails['username'] = $user->username;
@@ -1598,6 +1644,7 @@ class PickleballController extends Controller
                     if (in_array('website_url', $visibleFields, true)) {
                         $profileDetails['website_url'] = $user->website_url;
                     }
+                    $profileDetails['social_links'] = $user->social_links;
                     if (in_array('birthday', $visibleFields, true)) {
                         $contactDetails['birthday'] = $user->birthday;
                     }
@@ -2223,6 +2270,12 @@ class PickleballController extends Controller
         }
 
         $venue = Venue::where('scheduler_id', $user->id)->first();
+        $totalCourts = (int) ($data['court_count'] ?? $settings['court_count'] ?? $venue?->court_count ?? 4);
+        $data['court_count'] = $totalCourts;
+        if (isset($data['covered_court_count']) && $data['covered_court_count'] !== null) {
+            $data['covered_court_count'] = max(0, min((int) $data['covered_court_count'], $totalCourts));
+        }
+
         if ($venue) {
             $venue->update($data);
         } else {

@@ -754,4 +754,76 @@ class TournamentRequestFlowTest extends TestCase
                 ->where('activeTournament.id', $tournament->id)
             );
     }
+
+    public function test_rejected_tournament_request_revokes_player_workspace_access(): void
+    {
+        $scheduler = User::factory()->create(['role' => 'scheduler', 'email_verified_at' => now()]);
+        $venue = Venue::create(['scheduler_id' => $scheduler->id, 'name' => 'Grand Court', 'court_count' => 4, 'is_active' => true]);
+        $scheduler->update(['venue_id' => $venue->id]);
+
+        $player = User::factory()->create(['role' => 'player', 'email_verified_at' => now()]);
+
+        $requestModel = TournamentRequest::create([
+            'user_id' => $player->id,
+            'venue_id' => $venue->id,
+            'name' => 'Championship Cup',
+            'status' => 'pending',
+        ]);
+
+        // Scheduler approves request
+        $this->actingAs($scheduler)->post(route('tournament-requests.approve', $requestModel));
+        $requestModel->refresh();
+
+        $day = $requestModel->tournamentDay;
+        $this->assertNotNull($day);
+
+        // Player creates a tournament in the approved day
+        $tournament = Tournament::create([
+            'name' => 'Championship Bracket',
+            'type' => 'round_robin',
+            'category' => 'mens',
+            'status' => 'setup',
+            'min_players' => 2,
+            'max_players' => 4,
+            'best_of' => 1,
+            'start_time' => '08:00',
+            'match_duration' => 25,
+            'rest_time' => 5,
+            'enable_break' => false,
+            'venue_id' => $venue->id,
+            'tournament_day_id' => $day->id,
+            'manager_user_id' => $player->id,
+        ]);
+
+        // Player sees the tournament day and tournament when approved
+        $this->actingAs($player)
+            ->get(route('tournaments.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('tournamentDays', 1)
+                ->has('tournaments', 1)
+            );
+
+        // Scheduler REJECTS the request
+        $this->actingAs($scheduler)->post(route('tournament-requests.reject', $requestModel), [
+            'rejection_reason' => 'Invalid payment receipt',
+        ]);
+
+        $requestModel->refresh();
+        $this->assertSame('rejected', $requestModel->status);
+
+        // Player visit to index should now have 0 days and 0 tournaments
+        $this->actingAs($player)
+            ->get(route('tournaments.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('tournamentDays', 0)
+                ->has('tournaments', 0)
+            );
+
+        // Direct access attempt by player to the tournament should be rejected (403)
+        $this->actingAs($player)
+            ->get(route('tournaments.show', $tournament))
+            ->assertStatus(403);
+    }
 }

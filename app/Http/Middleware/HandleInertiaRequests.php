@@ -269,6 +269,7 @@ class HandleInertiaRequests extends Middleware
             'facebook_url' => $user->facebook_url,
             'instagram_url' => $user->instagram_url,
             'website_url' => $user->website_url,
+            'social_links' => $user->social_links,
             'role' => $request->session()->get('active_role', $user->role ?? 'admin'),
             'db_role' => $user->role ?? 'admin',
         ] : null;

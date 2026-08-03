@@ -116,6 +116,29 @@ const editingMatch = ref<any>(null);
 const showScheduleSettingsModal = ref(false);
 const showBackToSetupConfirm = ref(false);
 const showTournamentRequestsModal = ref(false);
+const requestStatusFilter = ref<'all' | 'pending' | 'approved' | 'completed' | 'rejected'>('all');
+
+const pendingRequestsCount = computed(() => tournamentRequests.value.filter((item: any) => item.status === 'pending').length);
+const approvedRequestsCount = computed(() => tournamentRequests.value.filter((item: any) => item.status === 'approved' && item.tournamentDay?.status !== 'finished').length);
+const completedRequestsCount = computed(() => tournamentRequests.value.filter((item: any) => item.status === 'approved' && item.tournamentDay?.status === 'finished').length);
+const rejectedRequestsCount = computed(() => tournamentRequests.value.filter((item: any) => item.status === 'rejected').length);
+
+const filteredTournamentRequests = computed(() => {
+    const list = tournamentRequests.value || [];
+    if (requestStatusFilter.value === 'pending') {
+        return list.filter((r: any) => r.status === 'pending');
+    }
+    if (requestStatusFilter.value === 'approved') {
+        return list.filter((r: any) => r.status === 'approved' && r.tournamentDay?.status !== 'finished');
+    }
+    if (requestStatusFilter.value === 'completed') {
+        return list.filter((r: any) => r.status === 'approved' && r.tournamentDay?.status === 'finished');
+    }
+    if (requestStatusFilter.value === 'rejected') {
+        return list.filter((r: any) => r.status === 'rejected');
+    }
+    return list;
+});
 const showPlayerFinishDayConfirm = ref(false);
 const showEditAccessRequestModal = ref(false);
 const playerFinishDayId = ref<number | null>(null);
@@ -5639,9 +5662,9 @@ const isAnyModalOpen = computed(() => {
                                     <ShieldCheck class="h-4 w-4" />
                                 </div>
                                 <div>
-                                    <h2 class="text-base font-bold text-slate-900 dark:text-white">Tournament Requests</h2>
+                                    <h2 class="text-base font-bold text-slate-900 dark:text-white">Player Tournament Requests</h2>
                                     <p class="text-[11px] text-slate-500 dark:text-slate-400">
-                                        Review player requests and approve them into tournaments
+                                        Review player requests and approve access into tournament workspaces
                                     </p>
                                 </div>
                             </div>
@@ -5653,9 +5676,57 @@ const isAnyModalOpen = computed(() => {
                             </button>
                         </div>
 
+                        <!-- Status Filter Bar -->
+                        <div class="flex items-center gap-2 border-b border-slate-100 bg-slate-50/50 px-5 py-3 dark:border-[#1a1a1a] dark:bg-[#0c0c0c] overflow-x-auto shrink-0">
+                            <button
+                                type="button"
+                                @click="requestStatusFilter = 'all'"
+                                class="rounded-full px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
+                                :class="requestStatusFilter === 'all' ? 'bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900' : 'bg-white text-slate-600 hover:bg-slate-200 dark:bg-[#181818] dark:text-slate-300'"
+                            >
+                                All ({{ tournamentRequests.length }})
+                            </button>
+                            <button
+                                type="button"
+                                @click="requestStatusFilter = 'pending'"
+                                class="rounded-full px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                :class="requestStatusFilter === 'pending' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200 dark:bg-[#181818] dark:text-slate-300'"
+                            >
+                                <span>Pending</span>
+                                <span v-if="pendingRequestsCount > 0" class="rounded-full bg-amber-600 px-1.5 py-0.5 text-[10px] text-white">{{ pendingRequestsCount }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                @click="requestStatusFilter = 'approved'"
+                                class="rounded-full px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                :class="requestStatusFilter === 'approved' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200 dark:bg-[#181818] dark:text-slate-300'"
+                            >
+                                <span>In Progress</span>
+                                <span v-if="approvedRequestsCount > 0" class="rounded-full bg-emerald-700 px-1.5 py-0.5 text-[10px] text-white">{{ approvedRequestsCount }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                @click="requestStatusFilter = 'completed'"
+                                class="rounded-full px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                :class="requestStatusFilter === 'completed' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200 dark:bg-[#181818] dark:text-slate-300'"
+                            >
+                                <span>Completed</span>
+                                <span v-if="completedRequestsCount > 0" class="rounded-full bg-blue-700 px-1.5 py-0.5 text-[10px] text-white">{{ completedRequestsCount }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                @click="requestStatusFilter = 'rejected'"
+                                class="rounded-full px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                :class="requestStatusFilter === 'rejected' ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200 dark:bg-[#181818] dark:text-slate-300'"
+                            >
+                                <span>Rejected</span>
+                                <span v-if="rejectedRequestsCount > 0" class="rounded-full bg-rose-700 px-1.5 py-0.5 text-[10px] text-white">{{ rejectedRequestsCount }}</span>
+                            </button>
+                        </div>
+
                         <div class="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-5">
                             <div
-                                v-for="requestItem in tournamentRequests"
+                                v-for="requestItem in filteredTournamentRequests"
                                 :key="requestItem.id"
                                 class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-[#1a1a1a] dark:bg-[#111111]"
                             >
@@ -5666,14 +5737,22 @@ const isAnyModalOpen = computed(() => {
                                             <span
                                                 class="rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider"
                                                 :class="
-                                                    requestItem.status === 'approved'
-                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                                                        : requestItem.status === 'rejected'
-                                                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
-                                                          : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                                                    requestItem.status === 'approved' && requestItem.tournamentDay?.status === 'finished'
+                                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
+                                                        : requestItem.status === 'approved'
+                                                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                                          : requestItem.status === 'rejected'
+                                                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                                                            : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
                                                 "
                                             >
-                                                {{ requestItem.status }}
+                                                {{
+                                                    requestItem.status === 'approved' && requestItem.tournamentDay?.status === 'finished'
+                                                        ? 'Completed'
+                                                        : requestItem.status === 'approved'
+                                                          ? 'In Progress'
+                                                          : requestItem.status
+                                                }}
                                             </span>
                                         </div>
                                         <p class="text-sm text-slate-500 dark:text-slate-400">
@@ -5689,13 +5768,17 @@ const isAnyModalOpen = computed(() => {
                                             Venue: {{ requestItem.venue?.name }}
                                         </p>
                                         <div class="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                                            <span v-if="requestItem.preferred_date">{{ requestItem.preferred_date }}</span>
-                                            <span v-if="requestItem.preferred_start_time">{{ requestItem.preferred_start_time }}</span>
+                                            <span v-if="requestItem.preferred_date">🗓️ {{ requestItem.preferred_date }}</span>
+                                            <span v-if="requestItem.preferred_start_time">⏰ {{ requestItem.preferred_start_time }}</span>
                                         </div>
-                                        <p v-if="requestItem.notes" class="max-w-3xl text-sm text-slate-700 dark:text-slate-300">{{ requestItem.notes }}</p>
-                                        <p v-if="requestItem.rejection_reason" class="text-sm text-rose-600 dark:text-rose-300">{{ requestItem.rejection_reason }}</p>
+                                        <p v-if="requestItem.notes" class="max-w-3xl text-sm text-slate-700 dark:text-slate-300">
+                                            📝 <strong>Notes:</strong> {{ requestItem.notes }}
+                                        </p>
+                                        <p v-if="requestItem.rejection_reason" class="text-sm text-rose-600 dark:text-rose-300">
+                                            Reason for rejection: {{ requestItem.rejection_reason }}
+                                        </p>
                                         <p v-if="requestItem.tournamentDay && !requestItem.tournament" class="text-sm text-emerald-600 dark:text-emerald-300">
-                                            Main folder ready: {{ requestItem.tournamentDay.name }} ({{ requestItem.tournamentDay.status }})
+                                            Main folder: {{ requestItem.tournamentDay.name }} ({{ requestItem.tournamentDay.status }})
                                         </p>
                                         <p v-if="requestItem.tournament" class="text-sm text-emerald-600 dark:text-emerald-300">
                                             {{ requestItem.request_type === 'edit_access' ? 'Target tournament:' : 'Tournament linked:' }}
@@ -5703,52 +5786,75 @@ const isAnyModalOpen = computed(() => {
                                         </p>
                                     </div>
 
-                                    <div v-if="requestItem.status === 'pending'" class="flex flex-col gap-3 lg:w-80">
-                                        <button
-                                            class="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500"
-                                            @click="approveTournamentRequest(requestItem.id)"
-                                        >
-                                            <CheckCircle class="h-4 w-4" />
-                                            {{ requestItem.request_type === 'edit_access' ? 'Approve And Unlock Access' : 'Approve And Create Main Folder' }}
-                                        </button>
-                                        <button
-                                            class="inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-200 px-4 py-3 text-sm font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                                            @click="openRejectTournamentRequest(requestItem.id)"
-                                        >
-                                            <AlertCircle class="h-4 w-4" />
-                                            Reject
-                                        </button>
-                                        <form
-                                            v-if="rejectingRequestId === requestItem.id"
-                                            class="space-y-3 rounded-2xl border border-slate-200 p-4 dark:border-[#1a1a1a]"
-                                            @submit.prevent="submitRejectTournamentRequest(requestItem.id)"
-                                        >
-                                            <textarea
-                                                v-model="requestRejectForm.rejection_reason"
-                                                rows="3"
-                                                placeholder="Optional reason for rejection"
-                                                class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:text-white"
-                                            ></textarea>
-                                            <div class="flex gap-2">
-                                                <button type="submit" class="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white">Confirm Reject</button>
-                                                <button
-                                                    type="button"
-                                                    class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-[#1a1a1a] dark:text-slate-300"
-                                                    @click="rejectingRequestId = null"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            </div>
-                                        </form>
+                                    <div class="flex flex-col gap-3 lg:w-72 shrink-0">
+                                        <template v-if="requestItem.status === 'pending'">
+                                            <button
+                                                class="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500 shadow-sm cursor-pointer"
+                                                @click="approveTournamentRequest(requestItem.id)"
+                                            >
+                                                <CheckCircle class="h-4 w-4" />
+                                                {{ requestItem.request_type === 'edit_access' ? 'Approve & Unlock Access' : 'Approve & Create Folder' }}
+                                            </button>
+                                            <button
+                                                class="inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-200 px-4 py-3 text-sm font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10 cursor-pointer"
+                                                @click="openRejectTournamentRequest(requestItem.id)"
+                                            >
+                                                <AlertCircle class="h-4 w-4" />
+                                                Reject Request
+                                            </button>
+                                            <form
+                                                v-if="rejectingRequestId === requestItem.id"
+                                                class="space-y-3 rounded-2xl border border-slate-200 p-4 dark:border-[#1a1a1a]"
+                                                @submit.prevent="submitRejectTournamentRequest(requestItem.id)"
+                                            >
+                                                <textarea
+                                                    v-model="requestRejectForm.rejection_reason"
+                                                    rows="3"
+                                                    placeholder="Optional reason for rejection"
+                                                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:text-white"
+                                                ></textarea>
+                                                <div class="flex gap-2">
+                                                    <button type="submit" class="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white cursor-pointer">Confirm Reject</button>
+                                                    <button
+                                                        type="button"
+                                                        class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-[#1a1a1a] dark:text-slate-300 cursor-pointer"
+                                                        @click="rejectingRequestId = null"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </template>
+
+                                        <template v-else-if="requestItem.status === 'approved'">
+                                            <button
+                                                type="button"
+                                                @click="showTournamentRequestsModal = false"
+                                                class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 cursor-pointer"
+                                            >
+                                                <FolderOpen class="h-4 w-4" />
+                                                View Workspace
+                                            </button>
+                                        </template>
+
+                                        <template v-else-if="requestItem.status === 'rejected'">
+                                            <button
+                                                class="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500 shadow-sm cursor-pointer"
+                                                @click="approveTournamentRequest(requestItem.id)"
+                                            >
+                                                <CheckCircle class="h-4 w-4" />
+                                                Re-approve Access
+                                            </button>
+                                        </template>
                                     </div>
                                 </div>
                             </div>
 
                             <div
-                                v-if="tournamentRequests.length === 0"
+                                v-if="filteredTournamentRequests.length === 0"
                                 class="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-[#1a1a1a] dark:text-slate-500"
                             >
-                                No tournament requests yet.
+                                No {{ requestStatusFilter === 'all' ? '' : requestStatusFilter }} tournament requests found.
                             </div>
                         </div>
                     </div>

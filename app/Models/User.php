@@ -33,6 +33,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'facebook_url',
         'instagram_url',
         'website_url',
+        'social_links',
         'all_time_stats_visible_fields',
         'role',
         'allow_unverified_access',
@@ -187,6 +188,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'allow_unverified_access' => 'boolean',
             'all_time_stats_visible_fields' => 'array',
+            'social_links' => 'array',
         ];
     }
 }

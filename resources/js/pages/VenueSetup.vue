@@ -2,7 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { Building2, Camera, Clock3, ImagePlus, Mail, MapPin, Phone, Save, Tag, Trophy, Plus, X } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
     venue: null | {
@@ -139,6 +139,17 @@ const operationalHoursPreview = computed(() => {
 });
 
 const displayCourtCount = computed(() => props.venue?.court_count ?? props.default_court_count ?? 1);
+
+watch(() => form.covered_court_count, (val) => {
+    if (val !== null && val !== undefined && val !== '') {
+        const maxCourts = displayCourtCount.value;
+        if (Number(val) > maxCourts) {
+            form.covered_court_count = maxCourts;
+        } else if (Number(val) < 0) {
+            form.covered_court_count = 0;
+        }
+    }
+});
 
 const updateSinglePreview = (event: Event, type: 'logo' | 'cover') => {
     const target = event.target as HTMLInputElement;
@@ -290,9 +301,13 @@ const submit = () => {
                                     v-model="form.covered_court_count"
                                     type="number"
                                     min="0"
+                                    :max="displayCourtCount"
                                     class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 dark:border-[#1a1a1a] dark:bg-[#090909] dark:text-white"
                                     placeholder="Optional"
                                 />
+                                <p class="text-xs text-slate-500 dark:text-slate-400">
+                                    Maximum {{ displayCourtCount }} (cannot exceed total courts).
+                                </p>
                             </div>
 
                             <div class="grid gap-2">

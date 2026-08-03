@@ -72,6 +72,7 @@ export interface User {
     facebook_url?: string | null;
     instagram_url?: string | null;
     website_url?: string | null;
+    social_links?: Array<{ platform: string; url: string }> | null;
     role: 'admin' | 'scheduler' | 'scorer' | 'scheduler_scorer' | 'player';
     db_role?: 'admin' | 'scheduler' | 'scorer' | 'scheduler_scorer' | 'player';
     scheduler_id?: number | null;

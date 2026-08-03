@@ -37,12 +37,14 @@ class ProfileController extends Controller
 
     private function allTimeStatsVisibleFields(?User $user): array
     {
-        $stored = collect($user?->all_time_stats_visible_fields ?? [])
+        if ($user?->all_time_stats_visible_fields === null) {
+            return self::ALL_TIME_STATS_VISIBILITY_FIELDS;
+        }
+
+        return collect($user->all_time_stats_visible_fields)
             ->filter(fn ($field) => in_array($field, self::ALL_TIME_STATS_VISIBILITY_FIELDS, true))
             ->values()
             ->all();
-
-        return $stored !== [] ? $stored : self::ALL_TIME_STATS_VISIBILITY_FIELDS;
     }
 
     /**
@@ -81,14 +83,88 @@ class ProfileController extends Controller
 
         $allVenueIds = array_values(array_unique(array_filter(array_merge($playerVenueIds, $matchVenueIds, $bookingVenueIds))));
 
+        $matchesCountByVenue = [];
+        if ($playerIds !== []) {
+            $counts = GameMatch::where('is_tallied', true)
+                ->where(function ($q) use ($playerIds) {
+                    $q->whereIn('player_1_id', $playerIds)
+                      ->orWhereIn('player_2_id', $playerIds)
+                      ->orWhereIn('player_3_id', $playerIds)
+                      ->orWhereIn('player_4_id', $playerIds);
+                })
+                ->whereNotNull('venue_id')
+                ->selectRaw('venue_id, count(*) as total')
+                ->groupBy('venue_id')
+                ->pluck('total', 'venue_id')
+                ->all();
+            $matchesCountByVenue = $counts;
+        }
+
+        foreach ($playerProfiles as $pp) {
+            if ($pp->venue_id) {
+                $matchesCountByVenue[$pp->venue_id] = max((int) ($matchesCountByVenue[$pp->venue_id] ?? 0), (int) ($pp->total_matches ?? 0));
+            }
+        }
+
+        $winPoints = max(1, (int) (SystemSetting::where('key', 'scoring_win_points')->value('value') ?? 10));
+        $lossPenalty = max(1, (int) (SystemSetting::where('key', 'scoring_loss_penalty')->value('value') ?? 5));
+
         $playedVenues = $allVenueIds !== []
             ? Venue::query()
                 ->whereIn('id', $allVenueIds)
                 ->get(['id', 'name'])
-                ->map(fn (Venue $venue) => [
-                    'id' => $venue->id,
-                    'name' => $venue->name,
-                ])
+                ->map(function (Venue $venue) use ($playerProfile, $playerProfiles, $matchesCountByVenue, $playerIds, $winPoints, $lossPenalty) {
+                    $ppForVenue = $playerProfiles->firstWhere('venue_id', $venue->id);
+                    $isMember = (bool) ($ppForVenue?->is_member ?? false);
+                    $expiresAt = $ppForVenue?->membership_expires_at
+                        ? Carbon::parse($ppForVenue->membership_expires_at)->format('M d, Y')
+                        : null;
+
+                    $vWins = (int) ($ppForVenue?->wins ?? 0);
+                    $vLosses = (int) ($ppForVenue?->losses ?? 0);
+                    $vMatches = max((int) ($ppForVenue?->total_matches ?? 0), (int) ($matchesCountByVenue[$venue->id] ?? 0));
+
+                    if ($playerIds !== [] && ($vWins === 0 && $vLosses === 0)) {
+                        $talliedMatches = GameMatch::where('venue_id', $venue->id)
+                            ->where('is_tallied', true)
+                            ->where(function ($q) use ($playerIds) {
+                                $q->whereIn('player_1_id', $playerIds)
+                                  ->orWhereIn('player_2_id', $playerIds)
+                                  ->orWhereIn('player_3_id', $playerIds)
+                                  ->orWhereIn('player_4_id', $playerIds);
+                            })
+                            ->get();
+
+                        foreach ($talliedMatches as $m) {
+                            $isTeam1 = in_array($m->player_1_id, $playerIds, true) || in_array($m->player_3_id, $playerIds, true);
+                            $isTeam2 = in_array($m->player_2_id, $playerIds, true) || in_array($m->player_4_id, $playerIds, true);
+                            if (($isTeam1 && (int) $m->winning_team === 1) || ($isTeam2 && (int) $m->winning_team === 2)) {
+                                $vWins++;
+                            } elseif ($isTeam1 || $isTeam2) {
+                                $vLosses++;
+                            }
+                        }
+                        $vMatches = max($vMatches, count($talliedMatches), $vWins + $vLosses);
+                    }
+
+                    $vPoints = ($vWins * $winPoints) - ($vLosses * $lossPenalty);
+                    $vWinRate = $vMatches > 0 ? round(($vWins / $vMatches) * 100, 1) : 0;
+
+                    return [
+                        'id' => $venue->id,
+                        'name' => $venue->name,
+                        'wins' => $vWins,
+                        'losses' => $vLosses,
+                        'matches_count' => $vMatches,
+                        'points' => $vPoints,
+                        'win_rate' => $vWinRate,
+                        'is_primary' => $venue->id === $playerProfile?->venue_id,
+                        'is_member' => $isMember,
+                        'membership_expires_at' => $expiresAt,
+                    ];
+                })
+                ->sortByDesc('is_primary')
+                ->values()
                 ->all()
             : [];
         $statsVenueName = $playerProfile?->venue_id
@@ -97,9 +173,23 @@ class ProfileController extends Controller
 
         $winPoints = max(1, (int) (SystemSetting::where('key', 'scoring_win_points')->value('value') ?? 10));
         $lossPenalty = max(1, (int) (SystemSetting::where('key', 'scoring_loss_penalty')->value('value') ?? 5));
-        $totalMatches = (int) ($playerProfile?->total_matches ?? 0);
-        $wins = (int) ($playerProfile?->wins ?? 0);
-        $losses = (int) ($playerProfile?->losses ?? 0);
+        $wins = (int) $playerProfiles->sum('wins');
+        $losses = (int) $playerProfiles->sum('losses');
+        $sumPlayedVenuesMatches = (int) collect($playedVenues)->sum('matches_count');
+        $totalMatches = max((int) $playerProfiles->sum('total_matches'), $sumPlayedVenuesMatches);
+
+        if ($playerIds !== []) {
+            $actualTotalMatches = GameMatch::where('is_tallied', true)
+                ->where(function ($q) use ($playerIds) {
+                    $q->whereIn('player_1_id', $playerIds)
+                      ->orWhereIn('player_2_id', $playerIds)
+                      ->orWhereIn('player_3_id', $playerIds)
+                      ->orWhereIn('player_4_id', $playerIds);
+                })
+                ->count();
+            $totalMatches = max($totalMatches, $actualTotalMatches);
+        }
+
         $points = ($wins * $winPoints) - ($losses * $lossPenalty);
         $winRate = $totalMatches > 0 ? round(($wins / $totalMatches) * 100, 1) : 0;
 
@@ -179,9 +269,10 @@ class ProfileController extends Controller
             'facebook_url' => $data['facebook_url'] ?? null,
             'instagram_url' => $data['instagram_url'] ?? null,
             'website_url' => $data['website_url'] ?? null,
+            'social_links' => $data['social_links'] ?? null,
         ];
 
-        unset($data['phone'], $data['birthday'], $data['address'], $data['facebook_url'], $data['instagram_url'], $data['website_url']);
+        unset($data['phone'], $data['birthday'], $data['address'], $data['facebook_url'], $data['instagram_url'], $data['website_url'], $data['social_links']);
         $data['name'] = $fullName;
         $user->fill($data);
         $user->fill($socialData);

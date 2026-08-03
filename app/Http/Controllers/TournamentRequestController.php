@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Booking;
+use App\Models\DateAvailability;
+use App\Models\DayAvailability;
+use App\Models\Player;
 use App\Models\Tournament;
 use App\Models\TournamentDay;
 use App\Models\TournamentRequest;
@@ -77,18 +80,32 @@ class TournamentRequestController extends Controller
             abort(403, 'Access denied.');
         }
 
+        $primaryVenueId = Player::where('user_id', $user->id)
+            ->whereNotNull('venue_id')
+            ->latest('id')
+            ->value('venue_id');
+
+        $playedVenueIds = Player::where('user_id', $user->id)->whereNotNull('venue_id')->pluck('venue_id')->all();
+        $bookedVenueIds = Booking::where('user_id', $user->id)->whereNotNull('venue_id')->pluck('venue_id')->all();
+        $requestedVenueIds = TournamentRequest::where('user_id', $user->id)->whereNotNull('venue_id')->pluck('venue_id')->all();
+
+        $allVisitedVenueIds = array_values(array_unique(array_filter(array_merge($playedVenueIds, $bookedVenueIds, $requestedVenueIds))));
+
         return Inertia::render('PlayerVenues', [
             'venues' => Venue::query()
                 ->whereNotNull('scheduler_id')
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get()
-                ->map(function (Venue $venue) {
+                ->map(function (Venue $venue) use ($primaryVenueId, $allVisitedVenueIds) {
                     $amenities = collect($venue->amenities ?? [])
                         ->map(static fn ($item) => trim((string) $item))
                         ->filter()
                         ->values()
                         ->all();
+
+                    $isPrimary = (int) $venue->id === (int) $primaryVenueId;
+                    $isVisited = !$isPrimary && in_array($venue->id, $allVisitedVenueIds, true);
 
                     return [
                         'id' => $venue->id,
@@ -104,8 +121,23 @@ class TournamentRequestController extends Controller
                         'amenities' => $amenities,
                         'default_hourly_rate' => (float) ($venue->default_hourly_rate ?? 0),
                         'contact_phone' => $venue->contact_phone,
+                        'payment_account_name' => $venue->payment_account_name,
+                        'payment_qr_photo' => $this->publicStorageUrl($venue->payment_qr_photo),
+                        'is_primary' => $isPrimary,
+                        'is_visited' => $isVisited,
                     ];
-                }),
+                })
+                ->sort(function ($a, $b) {
+                    if ($a['is_primary'] !== $b['is_primary']) {
+                        return $a['is_primary'] ? -1 : 1;
+                    }
+                    if ($a['is_visited'] !== $b['is_visited']) {
+                        return $a['is_visited'] ? -1 : 1;
+                    }
+                    return strnatcasecmp($a['name'], $b['name']);
+                })
+                ->values()
+                ->all(),
             'requests' => TournamentRequest::with(['venue:id,name', 'tournament:id,name,status', 'tournamentDay:id,name,date,status'])
                 ->where('user_id', $user->id)
                 ->latest()
@@ -117,6 +149,7 @@ class TournamentRequestController extends Controller
                             $playerQuery->where('players.user_id', $user->id)
                                 ->where(function ($statusQuery) {
                                     $statusQuery->where('booking_player.status', 'accepted')
+                                        ->orWhere('booking_player.status', 'confirmed')
                                         ->orWhereNull('booking_player.status');
                                 });
                         });
@@ -144,6 +177,109 @@ class TournamentRequestController extends Controller
         ]);
     }
 
+    public function setPrimaryVenue(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->isPlayer()) {
+            abort(403, 'Access denied.');
+        }
+
+        $validated = $request->validate([
+            'venue_id' => 'required|exists:venues,id',
+        ]);
+
+        // Set favourite/primary venue preference on user model
+        $user->update(['venue_id' => $validated['venue_id']]);
+
+        // Ensure a player profile exists for this venue without overwriting existing venue profiles
+        $existing = Player::where('user_id', $user->id)->where('venue_id', $validated['venue_id'])->first();
+        if (!$existing) {
+            $basePlayer = Player::where('user_id', $user->id)->first();
+            Player::create([
+                'user_id' => $user->id,
+                'venue_id' => $validated['venue_id'],
+                'name' => $basePlayer?->name ?? $user->name,
+                'full_name' => $basePlayer?->full_name ?? $user->name,
+                'phone' => $basePlayer?->phone ?? $user->phone,
+                'birthday' => $basePlayer?->birthday,
+                'address' => $basePlayer?->address ?? $user->address,
+                'show_in_roster' => true,
+            ]);
+        }
+
+        return back()->with('success', 'Primary venue updated successfully.');
+    }
+
+    public function venueAvailability(Request $request)
+    {
+        $venueId = $request->input('venue_id');
+        $date = $request->input('date');
+
+        if (!$venueId || !$date) {
+            return response()->json(['error' => 'Missing venue_id or date'], 400);
+        }
+
+        $venue = Venue::find($venueId);
+        if (!$venue) {
+            return response()->json(['error' => 'Venue not found'], 404);
+        }
+
+        $avail = $this->getVenueDateAvailability($date, $venue->id);
+
+        $bookings = Booking::where('venue_id', $venue->id)
+            ->where('booking_date', $date)
+            ->whereNotIn('status', ['rejected', 'cancelled'])
+            ->get(['id', 'start_time', 'end_time', 'court_number', 'status']);
+
+        return response()->json([
+            'is_closed' => $avail['is_closed'],
+            'opening_time' => $avail['opening_time'],
+            'closing_time' => $avail['closing_time'],
+            'close_reason' => $avail['close_reason'],
+            'court_count' => (int) $venue->court_count,
+            'bookings' => $bookings,
+        ]);
+    }
+
+    private function getVenueDateAvailability($date, $venueId)
+    {
+        // 1. Check for specific date override
+        $dateOverride = DateAvailability::where('date', $date)
+            ->where('venue_id', $venueId)
+            ->first();
+        if ($dateOverride) {
+            return [
+                'is_closed' => (bool)$dateOverride->is_closed,
+                'opening_time' => $dateOverride->opening_time ? substr($dateOverride->opening_time, 0, 5) : null,
+                'closing_time' => $dateOverride->closing_time ? substr($dateOverride->closing_time, 0, 5) : null,
+                'close_reason' => $dateOverride->close_reason,
+            ];
+        }
+
+        // 2. Check for day-of-week setting
+        $dayOfWeek = \Carbon\Carbon::parse($date)->dayOfWeek; // 0 = Sunday, 6 = Saturday
+        $daySetting = DayAvailability::where('day_of_week', $dayOfWeek)
+            ->where('venue_id', $venueId)
+            ->first();
+        if ($daySetting && $daySetting->is_enabled) {
+            return [
+                'is_closed' => (bool)$daySetting->is_closed,
+                'opening_time' => $daySetting->opening_time ? substr($daySetting->opening_time, 0, 5) : null,
+                'closing_time' => $daySetting->closing_time ? substr($daySetting->closing_time, 0, 5) : null,
+                'close_reason' => $daySetting->close_reason,
+            ];
+        }
+
+        // 3. Fallback to venue settings
+        $venue = Venue::find($venueId);
+        return [
+            'is_closed' => false,
+            'opening_time' => $venue?->opening_time ? substr($venue->opening_time, 0, 5) : '08:00',
+            'closing_time' => $venue?->closing_time ? substr($venue->closing_time, 0, 5) : '22:00',
+            'close_reason' => null,
+        ];
+    }
+
     public function store(Request $request)
     {
         $user = auth()->user();
@@ -156,11 +292,29 @@ class TournamentRequestController extends Controller
             'name' => 'required|string|max:255',
             'category' => 'nullable|in:mens,female,mix',
             'preferred_date' => 'nullable|date',
-            'preferred_start_time' => 'nullable|string|max:20',
+            'preferred_start_time' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:2000',
             'request_type' => 'nullable|in:new_tournament,edit_access',
             'tournament_id' => 'nullable|exists:tournaments,id',
+            'total_cost' => 'nullable|numeric|min:0',
+            'receipt_photo' => 'nullable|image|max:5120',
         ]);
+
+        if (!empty($validated['preferred_date'])) {
+            $today = now()->format('Y-m-d');
+            if ($validated['preferred_date'] < $today) {
+                return redirect()->back()->withErrors([
+                    'preferred_date' => 'The preferred date cannot be in the past.',
+                ]);
+            }
+
+            $avail = $this->getVenueDateAvailability($validated['preferred_date'], $validated['venue_id']);
+            if ($avail['is_closed']) {
+                return redirect()->back()->withErrors([
+                    'preferred_date' => 'The venue is closed on this date' . ($avail['close_reason'] ? ': ' . $avail['close_reason'] : '.'),
+                ]);
+            }
+        }
 
         $requestType = $validated['request_type'] ?? 'new_tournament';
         $targetTournament = null;
@@ -192,6 +346,11 @@ class TournamentRequestController extends Controller
             }
         }
 
+        $receiptPath = null;
+        if ($request->hasFile('receipt_photo')) {
+            $receiptPath = $request->file('receipt_photo')->store('receipts', 'public');
+        }
+
         TournamentRequest::create([
             'user_id' => $user->id,
             'venue_id' => $validated['venue_id'],
@@ -202,6 +361,9 @@ class TournamentRequestController extends Controller
             'preferred_date' => $validated['preferred_date'] ?? null,
             'preferred_start_time' => $validated['preferred_start_time'] ?? null,
             'notes' => $validated['notes'] ?? null,
+            'receipt_photo' => $receiptPath,
+            'total_cost' => $validated['total_cost'] ?? null,
+            'payment_status' => $receiptPath ? 'paid' : 'unpaid',
             'request_type' => $requestType,
             'status' => 'pending',
             'tournament_id' => $targetTournament?->id,

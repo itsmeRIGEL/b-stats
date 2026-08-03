@@ -85,6 +85,16 @@ class TournamentDayController extends Controller
             abort(403, 'Only player accounts can manage this player workspace.');
         }
 
+        $isRejected = TournamentRequest::query()
+            ->where('user_id', $user->id)
+            ->where('tournament_day_id', $day->id)
+            ->where('status', 'rejected')
+            ->exists();
+
+        if ($isRejected) {
+            abort(403, 'Access denied. Your request for this tournament has been rejected.');
+        }
+
         $ownsApprovedDay = TournamentRequest::query()
             ->where('user_id', $user->id)
             ->where('tournament_day_id', $day->id)

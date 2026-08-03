@@ -47,7 +47,17 @@ class TournamentController extends Controller
         $user = auth()->user();
 
         if ($user && $user->isPlayer()) {
-            return $query->where('manager_user_id', $user->id);
+            $rejectedDayIds = TournamentRequest::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'rejected')
+                ->whereNotNull('tournament_day_id')
+                ->pluck('tournament_day_id');
+
+            return $query->where('manager_user_id', $user->id)
+                ->where(function ($q) use ($rejectedDayIds) {
+                    $q->whereNotIn('tournament_day_id', $rejectedDayIds)
+                      ->orWhereNull('tournament_day_id');
+                });
         }
 
         return $this->scopeVenue($query);
@@ -73,7 +83,23 @@ class TournamentController extends Controller
             return;
         }
 
-        if ($user->isPlayer() && (int) $tournament->manager_user_id === (int) $user->id) {
+        if ($user->isPlayer()) {
+            if ((int) $tournament->manager_user_id !== (int) $user->id) {
+                abort(403, 'Access denied.');
+            }
+
+            if ($tournament->tournament_day_id) {
+                $isRejected = TournamentRequest::query()
+                    ->where('user_id', $user->id)
+                    ->where('tournament_day_id', $tournament->tournament_day_id)
+                    ->where('status', 'rejected')
+                    ->exists();
+
+                if ($isRejected) {
+                    abort(403, 'Access denied. Your tournament request for this workspace has been rejected.');
+                }
+            }
+
             return;
         }
 
@@ -93,6 +119,18 @@ class TournamentController extends Controller
 
         if ((int) $tournament->manager_user_id !== (int) $user->id) {
             abort(403, 'Access denied.');
+        }
+
+        if ($tournament->tournament_day_id) {
+            $isRejected = TournamentRequest::query()
+                ->where('user_id', $user->id)
+                ->where('tournament_day_id', $tournament->tournament_day_id)
+                ->where('status', 'rejected')
+                ->exists();
+
+            if ($isRejected) {
+                abort(403, 'Access denied. Your tournament request for this workspace has been rejected.');
+            }
         }
 
         $day = $tournament->tournamentDay;
@@ -128,14 +166,14 @@ class TournamentController extends Controller
         }
         $user = auth()->user();
         if ($user && $user->isPlayer()) {
-            $approvedAccess = TournamentRequest::query()
+            $isRejected = TournamentRequest::query()
                 ->where('user_id', $user->id)
                 ->where('tournament_day_id', $day->id)
-                ->whereIn('status', ['approved'])
+                ->where('status', 'rejected')
                 ->exists();
 
-            if (!$approvedAccess) {
-                abort(403, 'Access denied.');
+            if ($isRejected) {
+                abort(403, 'Access denied. Your request for this tournament has been rejected.');
             }
 
             return;
@@ -157,18 +195,14 @@ class TournamentController extends Controller
 
         $user = auth()->user();
         if ($user && $user->isPlayer()) {
-            $ownsApprovedDay = TournamentRequest::query()
+            $isRejected = TournamentRequest::query()
                 ->where('user_id', $user->id)
                 ->where('tournament_day_id', $subFolder->tournament_day_id)
-                ->where('status', 'approved')
+                ->where('status', 'rejected')
                 ->exists();
 
-            $ownsManagedTournament = $subFolder->tournaments()
-                ->where('manager_user_id', $user->id)
-                ->exists();
-
-            if (!$ownsApprovedDay && !$ownsManagedTournament) {
-                abort(403, 'Access denied.');
+            if ($isRejected) {
+                abort(403, 'Access denied. Your request for this tournament has been rejected.');
             }
 
             return $subFolder;
@@ -200,12 +234,24 @@ class TournamentController extends Controller
             : $this->scopeVenue(Player::select('id', 'name'))->orderBy('name')->get();
 
         if ($user && $user->isPlayer()) {
-            $requestDayIds = TournamentRequest::query()
+            $approvedRequestDayIds = TournamentRequest::query()
                 ->where('user_id', $user->id)
                 ->where('status', 'approved')
                 ->whereNotNull('tournament_day_id')
                 ->pluck('tournament_day_id');
-            $dayIds = $tournaments->pluck('tournament_day_id')->filter()->merge($requestDayIds)->unique()->values();
+
+            $rejectedDayIds = TournamentRequest::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'rejected')
+                ->whereNotNull('tournament_day_id')
+                ->pluck('tournament_day_id');
+
+            $dayIds = $tournaments->pluck('tournament_day_id')
+                ->filter()
+                ->merge($approvedRequestDayIds)
+                ->reject(fn ($id) => in_array($id, $rejectedDayIds->all(), true))
+                ->unique()
+                ->values();
 
             $tournamentDays = TournamentDay::withCount('tournaments')
                 ->with('venue:id,name')

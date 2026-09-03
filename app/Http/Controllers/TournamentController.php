@@ -1015,6 +1015,32 @@ class TournamentController extends Controller
         return back()->with('success', "{$count} tournament(s) deleted.");
     }
 
+    public function finish(Tournament $tournament)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort(403, 'Access denied.');
+        }
+
+        $isManager = (int) $tournament->manager_user_id === (int) $user->id;
+        $isVenueScheduler = $user->isScheduler() && (int) $tournament->venue_id === (int) $user->currentVenue()?->id;
+
+        if (!$user->isAdmin() && !$isVenueScheduler && !$isManager) {
+            abort(403, 'You do not have permission to finish this tournament.');
+        }
+
+        $tournament->update([
+            'status' => 'completed',
+            'archived_at' => now(),
+        ]);
+
+        if ($tournament->tournamentDay) {
+            $tournament->tournamentDay->update(['status' => 'finished']);
+        }
+
+        return back()->with('success', 'Tournament finished and archived successfully.');
+    }
+
     public function archive(Tournament $tournament)
     {
         $this->ensureTournamentAccess($tournament);

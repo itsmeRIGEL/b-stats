@@ -4,7 +4,7 @@ import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Activity, Calendar, CreditCard, LayoutGrid, MapPin, Settings, Swords, TrendingUp, Trophy, User, Users } from 'lucide-vue-next';
+import { Activity, Calendar, CreditCard, LayoutGrid, MapPin, Settings, ShieldCheck, Swords, TrendingUp, Trophy, User, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -52,6 +52,11 @@ const allNavItems: NavItem[] = [
         icon: Swords,
     },
     {
+        title: 'Tournament Requests',
+        href: '/tournament-requests',
+        icon: ShieldCheck,
+    },
+    {
         title: 'Sales Report',
         href: '/sales-report',
         icon: TrendingUp,
@@ -63,7 +68,7 @@ const allNavItems: NavItem[] = [
     },
 ];
 
-const schedulerAllowed = ['/dashboard', '/admin-users', '/bookings', '/memberships', '/all-time-stats', '/tournaments', '/sales-report', '/pickleball-settings'];
+const schedulerAllowed = ['/dashboard', '/admin-users', '/bookings', '/memberships', '/all-time-stats', '/tournament-requests', '/sales-report', '/pickleball-settings'];
 const scorerAllowed = ['/scoring', '/all-time-stats', '/tournaments'];
 const mainNavItems = computed(() => {
     if (isScheduler.value && !hasVenue.value) {

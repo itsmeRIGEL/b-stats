@@ -109,6 +109,7 @@ Route::middleware(['auth', 'verified', 'venue'])->group(function () {
         Route::get('tournaments/{tournament}', [TournamentController::class, 'show'])->name('tournaments.show');
         Route::delete('tournaments/{tournament}', [TournamentController::class, 'destroy'])->name('tournaments.destroy');
         Route::post('tournaments/{tournament}/archive', [TournamentController::class, 'archive'])->name('tournaments.archive');
+        Route::post('tournaments/{tournament}/finish', [TournamentController::class, 'finish'])->name('tournaments.finish');
         Route::post('tournaments/{tournament}/unarchive', [TournamentController::class, 'unarchive'])->name('tournaments.unarchive');
         Route::post('tournaments/{tournament}/back-to-setup', [TournamentController::class, 'backToSetup'])->name('tournaments.back-to-setup');
         Route::post('tournaments/{tournament}/teams', [TournamentController::class, 'addTeam'])->name('tournaments.add-team');

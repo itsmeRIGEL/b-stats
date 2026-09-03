@@ -392,7 +392,11 @@ class TournamentRequestController extends Controller
                 $query->where('venue_id', $user->currentVenue()?->id);
             })
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($tr) {
+                $tr->receipt_url = $tr->receipt_photo ? $this->publicStorageUrl($tr->receipt_photo) : null;
+                return $tr;
+            });
 
         return Inertia::render('TournamentRequests', [
             'requests' => $requests,

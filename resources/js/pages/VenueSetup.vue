@@ -140,6 +140,26 @@ const operationalHoursPreview = computed(() => {
 
 const displayCourtCount = computed(() => props.venue?.court_count ?? props.default_court_count ?? 1);
 
+const outdoorCourtCount = computed(() => {
+    const total = displayCourtCount.value;
+    if (form.covered_court_count === null || form.covered_court_count === undefined || (form.covered_court_count as any) === '') {
+        return total;
+    }
+    const covered = Math.min(total, Math.max(0, Number(form.covered_court_count)));
+    return Math.max(0, total - covered);
+});
+
+const updateOutdoorCount = (val: string | number) => {
+    const total = displayCourtCount.value;
+    const numVal = Number(val);
+    if (isNaN(numVal) || val === '') {
+        form.covered_court_count = null;
+        return;
+    }
+    const clampedOutdoor = Math.min(total, Math.max(0, numVal));
+    form.covered_court_count = total - clampedOutdoor;
+};
+
 watch(() => form.covered_court_count, (val) => {
     if (val !== null && val !== undefined && val !== '') {
         const maxCourts = displayCourtCount.value;
@@ -280,34 +300,53 @@ const submit = () => {
                                 />
                             </div>
 
-                            <div class="grid gap-2">
-                                <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="court_count_display">Total courts</label>
-                                <input
-                                    id="court_count_display"
-                                    :value="displayCourtCount"
-                                    type="text"
-                                    readonly
-                                    class="cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 outline-none dark:border-[#1a1a1a] dark:bg-[#111] dark:text-slate-200"
-                                />
-                                <p class="text-xs text-slate-500 dark:text-slate-400">
-                                    Managed from your Operational Hours and scheduler settings.
-                                </p>
-                            </div>
+                            <div class="grid gap-4 sm:grid-cols-3 lg:col-span-2">
+                                <div class="grid gap-2">
+                                    <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="court_count_display">Total courts</label>
+                                    <input
+                                        id="court_count_display"
+                                        :value="displayCourtCount"
+                                        type="text"
+                                        readonly
+                                        class="h-12 w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 outline-none dark:border-[#1a1a1a] dark:bg-[#111] dark:text-slate-200"
+                                    />
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                                        Managed from Operational Hours settings.
+                                    </p>
+                                </div>
 
-                            <div class="grid gap-2">
-                                <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="covered_court_count">Covered courts</label>
-                                <input
-                                    id="covered_court_count"
-                                    v-model="form.covered_court_count"
-                                    type="number"
-                                    min="0"
-                                    :max="displayCourtCount"
-                                    class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 dark:border-[#1a1a1a] dark:bg-[#090909] dark:text-white"
-                                    placeholder="Optional"
-                                />
-                                <p class="text-xs text-slate-500 dark:text-slate-400">
-                                    Maximum {{ displayCourtCount }} (cannot exceed total courts).
-                                </p>
+                                <div class="grid gap-2">
+                                    <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="covered_court_count">Covered courts</label>
+                                    <input
+                                        id="covered_court_count"
+                                        v-model="form.covered_court_count"
+                                        type="number"
+                                        min="0"
+                                        :max="displayCourtCount"
+                                        class="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 dark:border-[#1a1a1a] dark:bg-[#090909] dark:text-white"
+                                        placeholder="0"
+                                    />
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                                        Maximum {{ displayCourtCount }} (cannot exceed total).
+                                    </p>
+                                </div>
+
+                                <div class="grid gap-2">
+                                    <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="outdoor_court_count">Outdoor courts</label>
+                                    <input
+                                        id="outdoor_court_count"
+                                        :value="outdoorCourtCount"
+                                        type="number"
+                                        min="0"
+                                        :max="displayCourtCount"
+                                        @input="(e) => updateOutdoorCount((e.target as HTMLInputElement).value)"
+                                        class="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 dark:border-[#1a1a1a] dark:bg-[#090909] dark:text-white"
+                                        placeholder="0"
+                                    />
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                                        Auto-calculated (Total - Covered).
+                                    </p>
+                                </div>
                             </div>
 
                             <div class="grid gap-2">
@@ -520,9 +559,9 @@ const submit = () => {
                             <div class="mt-5 grid gap-3 sm:grid-cols-2">
                                 <div class="rounded-2xl bg-slate-50 p-4 dark:bg-[#0a0a0a]">
                                     <p class="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Courts</p>
-                                    <p class="mt-2 text-lg font-black text-slate-900 dark:text-white">{{ displayCourtCount }}</p>
+                                    <p class="mt-2 text-lg font-black text-slate-900 dark:text-white">{{ displayCourtCount }} Total</p>
                                     <p class="text-xs text-slate-500 dark:text-slate-400">
-                                        {{ form.covered_court_count || 0 }} covered
+                                        {{ form.covered_court_count || 0 }} covered • {{ outdoorCourtCount }} outdoor
                                     </p>
                                 </div>
                                 <div class="rounded-2xl bg-slate-50 p-4 dark:bg-[#0a0a0a]">

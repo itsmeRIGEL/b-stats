@@ -233,14 +233,23 @@ const closePlayerFinishDayConfirm = () => {
 };
 
 const confirmPlayerFinishDay = () => {
-    if (!playerFinishDayId.value) return;
-    router.post(route('tournament-days.finish-player-access', playerFinishDayId.value), {}, {
-        preserveScroll: true,
-        onSuccess: () => {
-            triggerToast('Tournament day finished. Your workspace is now view-only.');
-            closePlayerFinishDayConfirm();
-        },
-    });
+    if (props.activeTournament?.id) {
+        router.post(route('tournaments.finish', props.activeTournament.id), {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                triggerToast('Tournament finished and archived successfully.');
+                closePlayerFinishDayConfirm();
+            },
+        });
+    } else if (playerFinishDayId.value) {
+        router.post(route('tournament-days.finish-player-access', playerFinishDayId.value), {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                triggerToast('Tournament day finished and workspace archived.');
+                closePlayerFinishDayConfirm();
+            },
+        });
+    }
 };
 
 // --- Bracket Settings (setup only) ---

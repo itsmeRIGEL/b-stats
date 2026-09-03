@@ -484,8 +484,8 @@ const getRequestStatusText = (req: any) => {
     if (!req) return '';
     const status = String(req.status || '').toLowerCase();
     const cleanDate = formatPreferredDate(req.preferred_date);
-    if (status === 'approved' && isBookingPast(cleanDate)) {
-        return 'COMPLETED';
+    if (status === 'approved' && (isBookingPast(cleanDate) || req.tournamentDay?.status === 'finished' || req.tournament?.status === 'completed')) {
+        return 'COMPLETED & ARCHIVED';
     }
     return status.toUpperCase();
 };
@@ -494,10 +494,10 @@ const requestStatusClass = (req: any) => {
     if (!req) return '';
     const status = typeof req === 'string' ? req : req.status;
     const cleanDate = typeof req === 'object' ? formatPreferredDate(req.preferred_date) : '';
-    const isPast = typeof req === 'object' && req.status === 'approved' && isBookingPast(cleanDate);
+    const isFinished = typeof req === 'object' && (isBookingPast(cleanDate) || req.tournamentDay?.status === 'finished' || req.tournament?.status === 'completed');
 
-    if (isPast) {
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300';
+    if (isFinished) {
+        return 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold';
     }
 
     if (status === 'approved') {
